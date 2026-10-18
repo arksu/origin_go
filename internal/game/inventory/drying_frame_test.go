@@ -28,10 +28,15 @@ func setupDryingInventory(t *testing.T, withRecipe bool) dryingInventoryFixture 
 		{DefID: 101, Key: "raw", Name: "Raw Material", Size: itemdefs.Size{W: 1, H: 1}},
 		{DefID: 102, Key: "dried", Name: "Dried Material", Size: itemdefs.Size{W: 1, H: 1}},
 		{DefID: 103, Key: "other", Name: "Other Item", Size: itemdefs.Size{W: 1, H: 1}},
+		{DefID: 104, Key: "dried_b", Name: "Dried B", Size: itemdefs.Size{W: 1, H: 1}},
+		{DefID: 105, Key: "dried_c", Name: "Dried C", Size: itemdefs.Size{W: 1, H: 1}},
+		{DefID: 106, Key: "dried_d", Name: "Dried D", Size: itemdefs.Size{W: 1, H: 1}},
 	}))
 	config := &objectdefs.DryingBehaviorConfig{}
 	if withRecipe {
-		config.Processes = []objectdefs.DryingProcessConfig{{InputTypeID: 101, OutputTypeID: 102}}
+		config.Processes = []objectdefs.DryingProcessConfig{{InputTypeID: 101, Outputs: []objectdefs.DryingOutputConfig{
+			{TypeID: 102}, {TypeID: 104}, {TypeID: 105}, {TypeID: 106},
+		}}}
 	}
 	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{
 		{DefID: 10, Key: "player", Name: "Player"},
@@ -78,10 +83,14 @@ func TestDryingFrameAdmissionUsesSharedMoveValidation(t *testing.T) {
 	}{
 		{"empty recipes", false, 101, constt.InventoryHand, 1, false},
 		{"raw from hand", true, 101, constt.InventoryHand, 1, true},
-		{"output from backpack", true, 102, constt.InventoryGrid, 1, true},
+		{"first output from backpack", true, 102, constt.InventoryGrid, 1, true},
+		{"second output from hand", true, 104, constt.InventoryHand, 1, true},
+		{"third output from backpack", true, 105, constt.InventoryGrid, 1, true},
+		{"fourth output from hand", true, 106, constt.InventoryHand, 1, true},
 		{"other from hand", true, 103, constt.InventoryHand, 1, false},
 		{"other from backpack", true, 103, constt.InventoryGrid, 1, false},
-		{"malformed stack", true, 101, constt.InventoryHand, 2, false},
+		{"malformed input stack", true, 101, constt.InventoryHand, 2, false},
+		{"malformed output stack", true, 106, constt.InventoryHand, 2, false},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			f := setupDryingInventory(t, scenario.recipe)

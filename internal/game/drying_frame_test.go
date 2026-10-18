@@ -1,14 +1,17 @@
 package game
 
 import (
-	"encoding/json"
+	"context"
 	"testing"
+	"time"
 
 	"origin/internal/builddefs"
 	constt "origin/internal/const"
+	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
+	"origin/internal/eventbus"
 	"origin/internal/game/behaviors"
 	"origin/internal/game/behaviors/contracts"
 	"origin/internal/game/inventory"
@@ -71,7 +74,18 @@ func TestDryingFrameCatalogBuildCompletionAndOpen(t *testing.T) {
 	require.Empty(t, build.RequiredSkills)
 	require.Empty(t, build.RequiredDiscovery)
 	require.False(t, frame.HasBehavior("lift"))
-	require.Empty(t, frame.DryingConfig.Processes)
+	require.Equal(t, 19, frame.DefID)
+	require.True(t, frame.IsStatic)
+	require.EqualValues(t, 100, frame.HP)
+	require.Len(t, frame.DryingConfig.Processes, 1)
+	process := frame.DryingConfig.Processes[0]
+	require.Equal(t, "wild_windsown_weed", process.InputItemKey)
+	require.Equal(t, []string{"seed_wheat", "seed_carrot", "seed_beet", "seed_potato"}, process.OutputItemKeys)
+	require.Equal(t, int64(16*60*60), process.DurationSeconds)
+	require.Equal(t, "herbs", process.VisualCategory)
+	require.Equal(t, []string{"drying"}, frame.Station.Capabilities)
+	require.Equal(t, []string{"ready"}, frame.Station.States)
+	require.Equal(t, "ready", frame.Station.InitialState)
 	w := ecs.NewWorldForTesting()
 	registry := behaviors.MustDefaultRegistry()
 	factory := gameworld.NewObjectFactory(nil)
@@ -93,6 +107,10 @@ func TestDryingFrameCatalogBuildCompletionAndOpen(t *testing.T) {
 	require.Equal(t, float64(992), stats.Stamina)
 	info, _ := ecs.GetComponent[components.EntityInfo](w, site)
 	require.Equal(t, uint32(frame.DefID), info.TypeID)
+	station, found := ecs.GetComponent[components.StationState](w, site)
+	require.True(t, found)
+	require.Equal(t, []string{"drying"}, station.Capabilities)
+	require.Equal(t, "ready", station.CurrentState)
 	collider, _ := ecs.GetComponent[components.Collider](w, site)
 	require.Equal(t, float64(12), collider.HalfWidth)
 	require.Equal(t, float64(4), collider.HalfHeight)
@@ -107,76 +125,303 @@ func TestDryingFrameCatalogBuildCompletionAndOpen(t *testing.T) {
 	require.Equal(t, uint32(2), sender.opened[1].GetGrid().Height)
 }
 
-func TestDryingFrameRealInventoryHookAndViewerUpdates(t *testing.T) {
+type dryingFrameFixture struct {
+	w                   *ecs.World
+	frame, root, player types.Handle
+	registry            *behaviors.Registry
+	deps                *contracts.ExecutionDeps
+	executor            *inventory.InventoryExecutor
+	sender              *dryingFrameSender
+	inputTypeID         uint32
+	outputTypeIDs       []uint32
+}
+
+func setupLiveDryingFrame(t *testing.T) dryingFrameFixture {
+	t.Helper()
 	frame, _ := loadDryingFrameCatalog(t)
-	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{
-		{DefID: 901, Key: "test_raw", Name: "Raw", Size: itemdefs.Size{W: 1, H: 1}},
-		{DefID: 902, Key: "test_dried", Name: "Dried", Size: itemdefs.Size{W: 1, H: 1}, Resource: "test/dried"},
-	}))
-	fixture := *frame
-	fixture.Behaviors = map[string]json.RawMessage{"container": json.RawMessage(`{}`), "drying": json.RawMessage(`{"processes":[{"inputItemKey":"test_raw","outputItemKey":"test_dried","durationSeconds":300}]}`)}
 	registry := behaviors.MustDefaultRegistry()
-	behavior, _ := registry.GetBehavior("drying")
-	_, err := behavior.(contracts.BehaviorDefConfigValidator).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{Def: &fixture, RawConfig: fixture.Behaviors["drying"]})
-	require.NoError(t, err)
-	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{fixture}))
 	w := ecs.NewWorldForTesting()
 	ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal = 100
 	factory := gameworld.NewObjectFactory(nil)
-	frameHandle := gameworld.SpawnEntityFromDef(w, &fixture, gameworld.DefSpawnParams{EntityID: 2, Quality: 800})
-	factory.EnsureObjectInventoriesForDef(w, frameHandle, 2, &fixture)
-	root, _ := ecs.GetResource[ecs.InventoryRefIndex](w).Lookup(constt.InventoryGrid, 2, 0)
-	ecs.WithComponent(w, root, func(c *components.InventoryContainer) {
-		c.Items = []components.InvItem{{ItemID: 101, TypeID: 901, Quality: 37, Quantity: 1, W: 1, H: 1}}
+	frameHandle := gameworld.SpawnEntityFromDef(w, frame, gameworld.DefSpawnParams{
+		EntityID: 2, Quality: 800, InitReason: contracts.ObjectBehaviorInitReasonSpawn, BehaviorRegistry: registry,
 	})
+	require.NotEqual(t, types.InvalidHandle, frameHandle)
+	station, found := ecs.GetComponent[components.StationState](w, frameHandle)
+	require.True(t, found)
+	require.Equal(t, []string{"drying"}, station.Capabilities)
+	require.Equal(t, "ready", station.CurrentState)
+	factory.EnsureObjectInventoriesForDef(w, frameHandle, 2, frame)
+	root, found := ecs.GetResource[ecs.InventoryRefIndex](w).Lookup(constt.InventoryGrid, 2, 0)
+	require.True(t, found)
 	player := w.Spawn(1, nil)
+	playerDef, found := objectdefs.Global().GetByKey("player")
+	require.True(t, found)
+	ecs.AddComponent(w, player, components.EntityInfo{TypeID: uint32(playerDef.DefID)})
 	hand := w.SpawnWithoutExternalID()
 	ecs.AddComponent(w, hand, components.InventoryContainer{OwnerID: 1, Kind: constt.InventoryHand, Version: 1})
 	ecs.GetResource[ecs.InventoryRefIndex](w).Add(constt.InventoryHand, 1, 0, hand)
-	ecs.AddComponent(w, player, components.InventoryOwner{Inventories: []components.InventoryLink{{OwnerID: 1, Kind: constt.InventoryHand, Handle: hand}}})
+	backpack := w.SpawnWithoutExternalID()
+	ecs.AddComponent(w, backpack, components.InventoryContainer{OwnerID: 1, Kind: constt.InventoryGrid, Width: 2, Height: 2, Version: 1})
+	ecs.GetResource[ecs.InventoryRefIndex](w).Add(constt.InventoryGrid, 1, 0, backpack)
+	ecs.AddComponent(w, player, components.InventoryOwner{Inventories: []components.InventoryLink{
+		{OwnerID: 1, Kind: constt.InventoryHand, Handle: hand},
+		{OwnerID: 1, Kind: constt.InventoryGrid, Handle: backpack},
+	}})
 	opened := ecs.GetResource[ecs.OpenContainerState](w)
-	key := ecs.InventoryRefKey{Kind: constt.InventoryGrid, OwnerID: 2}
 	for _, viewer := range []types.EntityID{1, 3} {
 		opened.SetRootOpened(viewer, 2)
-		opened.OpenRef(viewer, key)
+		opened.OpenRef(viewer, ecs.InventoryRefKey{Kind: constt.InventoryGrid, OwnerID: 2})
 	}
 	sender := &dryingFrameSender{updated: make(map[types.EntityID][]*netproto.InventoryState)}
 	open := NewOpenContainerService(w, nil, sender, nil)
 	deps := &contracts.ExecutionDeps{IDAllocator: &dryingFrameIDs{next: 1000}, RootInventoryUpdate: func(w *ecs.World, id types.EntityID) { broadcastRootInventoryUpdate(w, open, id) }}
-	notifyRootInventoryMutation(w, registry, deps, 2)
-	state := func() *components.DryingBehaviorState {
-		internal, _ := ecs.GetComponent[components.ObjectInternalState](w, frameHandle)
-		state, _ := components.GetBehaviorState[components.DryingBehaviorState](internal, "drying")
-		return state
-	}
-	require.Equal(t, int64(400), state().Entries[0].CompletionRuntimeSeconds)
 	executor := inventory.NewInventoryExecutor(zap.NewNop(), nil, nil, nil, nil)
 	executor.SetRootMutationHook(func(w *ecs.World, id types.EntityID) { notifyRootInventoryMutation(w, registry, deps, id) })
-	rootRef := &netproto.InventoryRef{Kind: netproto.InventoryKind_INVENTORY_KIND_GRID, OwnerId: 2}
-	handRef := &netproto.InventoryRef{Kind: netproto.InventoryKind_INVENTORY_KIND_HAND, OwnerId: 1}
-	move := func(src, dst *netproto.InventoryRef, x uint32) {
-		result := executor.ExecuteOperation(w, 1, player, &netproto.InventoryOp{Kind: &netproto.InventoryOp_Move{Move: &netproto.InventoryMoveSpec{Src: src, Dst: dst, ItemId: 101, DstPos: &netproto.GridPos{X: x}}}})
+	process := frame.DryingConfig.Processes[0]
+	outputTypes := make([]uint32, len(process.Outputs))
+	for i, output := range process.Outputs {
+		outputTypes[i] = output.TypeID
+	}
+	return dryingFrameFixture{
+		w: w, frame: frameHandle, root: root, player: player, registry: registry,
+		deps: deps, executor: executor, sender: sender, inputTypeID: process.InputTypeID, outputTypeIDs: outputTypes,
+	}
+}
+
+func (f dryingFrameFixture) entries(t *testing.T) map[types.EntityID]components.DryingItemState {
+	t.Helper()
+	internal, found := ecs.GetComponent[components.ObjectInternalState](f.w, f.frame)
+	require.True(t, found)
+	state, found := components.GetBehaviorState[components.DryingBehaviorState](internal, "drying")
+	require.True(t, found)
+	entries := make(map[types.EntityID]components.DryingItemState, len(state.Entries))
+	for _, entry := range state.Entries {
+		entries[entry.InputItemID] = entry
+	}
+	return entries
+}
+
+func (f dryingFrameFixture) addInput(id types.EntityID, quality uint32, x, y uint8) {
+	ecs.WithComponent(f.w, f.root, func(container *components.InventoryContainer) {
+		container.Items = append(container.Items, components.InvItem{ItemID: id, TypeID: f.inputTypeID, Quality: quality, Quantity: 1, W: 1, H: 1, X: x, Y: y})
+		container.Version++
+	})
+	notifyRootInventoryMutation(f.w, f.registry, f.deps, 2)
+}
+
+func TestDryingFrameFourIndependentSlotsAndViewerUpdates(t *testing.T) {
+	f := setupLiveDryingFrame(t)
+	bus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 1})
+	t.Cleanup(func() { require.NoError(t, bus.Shutdown(context.Background())) })
+	appearances := make(chan *ecs.EntityAppearanceChangedEvent, 4)
+	bus.SubscribeAsync(ecs.TopicGameplayEntityAppearance, eventbus.PriorityMedium, func(_ context.Context, event eventbus.Event) error {
+		appearances <- event.(*ecs.EntityAppearanceChangedEvent)
+		return nil
+	})
+	// Existing observers must see both transitions without needing to move.
+	ecs.GetResource[ecs.VisibilityState](f.w).ObserversByVisibleTarget[f.frame] = map[types.Handle]struct{}{f.player: {}}
+	runtime := systems.NewObjectBehaviorSystem(bus, nil, systems.ObjectBehaviorConfig{BehaviorRegistry: f.registry})
+	for i := 0; i < 4; i++ {
+		ecs.GetResource[ecs.TimeState](f.w).RuntimeSecondsTotal = int64(100 + 25*i)
+		f.addInput(types.EntityID(101+i), uint32(37+i), uint8(i%2), uint8(i/2))
+	}
+	entries := f.entries(t)
+	require.Len(t, entries, 4)
+	for i := 0; i < 4; i++ {
+		require.Equal(t, int64(57700+25*i), entries[types.EntityID(101+i)].CompletionRuntimeSeconds)
+	}
+	require.Equal(t, 1, ecs.EnsureBehaviorRuntimeSchedule(f.w).PendingCount())
+	runtime.Update(f.w, 0)
+	appearance, _ := ecs.GetComponent[components.Appearance](f.w, f.frame)
+	require.Equal(t, "dframe/herbs", appearance.Resource)
+
+	system := systems.NewBehaviorTickSystem(nil, systems.BehaviorTickSystemConfig{BehaviorRegistry: f.registry, ExecutionDeps: f.deps})
+	for i := 0; i < 4; i++ {
+		ecs.GetResource[ecs.TimeState](f.w).RuntimeSecondsTotal = int64(57699 + 25*i)
+		system.Update(f.w, 0)
+		container, _ := ecs.GetComponent[components.InventoryContainer](f.w, f.root)
+		require.Equal(t, types.EntityID(101+i), container.Items[i].ItemID, "input survives until its own deadline")
+		ecs.GetResource[ecs.TimeState](f.w).RuntimeSecondsTotal++
+		system.Update(f.w, 0)
+		container, _ = ecs.GetComponent[components.InventoryContainer](f.w, f.root)
+		item := container.Items[i]
+		require.Equal(t, types.EntityID(1001+i), item.ItemID)
+		require.Contains(t, f.outputTypeIDs, item.TypeID)
+		require.Equal(t, uint32(37+i), item.Quality, "frame quality does not affect seed quality")
+		require.Equal(t, uint32(1), item.Quantity)
+		require.Equal(t, uint8(i%2), item.X)
+		require.Equal(t, uint8(i/2), item.Y)
+		require.Len(t, f.entries(t), 3-i)
+		for _, viewer := range []types.EntityID{1, 3} {
+			require.Len(t, f.sender.updated[viewer], 1)
+			state := f.sender.updated[viewer][0]
+			require.Equal(t, uint64(item.ItemID), state.GetGrid().Items[i].Item.ItemId)
+			require.Equal(t, container.Version, state.Revision)
+		}
+		runtime.Update(f.w, 0)
+		appearance, _ = ecs.GetComponent[components.Appearance](f.w, f.frame)
+		require.Equal(t, "dframe/herbs", appearance.Resource, "both raw herbs and their finished seeds retain the herb visual")
+	}
+	require.Zero(t, ecs.EnsureBehaviorRuntimeSchedule(f.w).PendingCount())
+	for i := 0; i < 4; i++ {
+		result := f.executor.ExecuteOperation(f.w, 1, f.player, &netproto.InventoryOp{Kind: &netproto.InventoryOp_Move{Move: &netproto.InventoryMoveSpec{
+			Src:    &netproto.InventoryRef{Kind: netproto.InventoryKind_INVENTORY_KIND_GRID, OwnerId: 2},
+			Dst:    &netproto.InventoryRef{Kind: netproto.InventoryKind_INVENTORY_KIND_GRID, OwnerId: 1},
+			ItemId: uint64(1001 + i), DstPos: &netproto.GridPos{X: uint32(i % 2), Y: uint32(i / 2)},
+		}}})
 		require.True(t, result.Success, result.Message)
+		runtime.Update(f.w, 0)
+		appearance, _ = ecs.GetComponent[components.Appearance](f.w, f.frame)
+		if i < 3 {
+			require.Equal(t, "dframe/herbs", appearance.Resource)
+		} else {
+			require.Equal(t, "dframe/empty", appearance.Resource, "removing the last seed clears the herb visual")
+		}
 	}
-	ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal = 150
-	move(rootRef, rootRef, 1)
-	require.Equal(t, int64(400), state().Entries[0].CompletionRuntimeSeconds)
-	move(rootRef, handRef, 0)
-	require.Empty(t, state().Entries)
-	require.Zero(t, ecs.EnsureBehaviorRuntimeSchedule(w).PendingCount())
-	move(handRef, rootRef, 1)
-	require.Equal(t, int64(450), state().Entries[0].CompletionRuntimeSeconds)
-	ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal = 450
-	systems.NewBehaviorTickSystem(nil, systems.BehaviorTickSystemConfig{BehaviorRegistry: registry, ExecutionDeps: deps}).Update(w, 0)
-	container, _ := ecs.GetComponent[components.InventoryContainer](w, root)
-	require.Equal(t, types.EntityID(1001), container.Items[0].ItemID)
-	require.Equal(t, uint32(902), container.Items[0].TypeID)
-	require.Equal(t, uint32(37), container.Items[0].Quality)
-	require.Equal(t, uint8(1), container.Items[0].X)
-	for _, viewer := range []types.EntityID{1, 3} {
-		require.Len(t, sender.updated[viewer], 1)
-		require.Equal(t, uint64(1001), sender.updated[viewer][0].GetGrid().Items[0].Item.ItemId)
-		require.Equal(t, container.Version, sender.updated[viewer][0].Revision)
+	for i := 0; i < 2; i++ {
+		select {
+		case event := <-appearances:
+			require.Equal(t, types.EntityID(2), event.TargetID)
+		case <-time.After(time.Second):
+			t.Fatal("stationary observer did not receive appearance transition")
+		}
 	}
-	require.Empty(t, state().Entries)
+	require.NoError(t, bus.Shutdown(context.Background()))
+	require.Empty(t, appearances, "unchanged herb appearance must not produce extra transitions")
+}
+
+func TestDryingFrameInventoryMovesResetOnlyAffectedTimers(t *testing.T) {
+	f := setupLiveDryingFrame(t)
+	f.addInput(101, 10, 0, 0)
+	f.addInput(102, 20, 0, 1)
+	f.addInput(103, 30, 1, 1)
+	root := &netproto.InventoryRef{Kind: netproto.InventoryKind_INVENTORY_KIND_GRID, OwnerId: 2}
+	hand := &netproto.InventoryRef{Kind: netproto.InventoryKind_INVENTORY_KIND_HAND, OwnerId: 1}
+	move := func(src, dst *netproto.InventoryRef, x, y uint32, swap bool) systems.InventoryOpResult {
+		return f.executor.ExecuteOperation(f.w, 1, f.player, &netproto.InventoryOp{Kind: &netproto.InventoryOp_Move{Move: &netproto.InventoryMoveSpec{
+			Src: src, Dst: dst, ItemId: 101, DstPos: &netproto.GridPos{X: x, Y: y}, AllowSwapOrMerge: swap,
+		}}})
+	}
+	assertDeadlines := func(first, second int64) {
+		t.Helper()
+		entries := f.entries(t)
+		require.Len(t, entries, 3)
+		require.Equal(t, first, entries[101].CompletionRuntimeSeconds)
+		require.Equal(t, second, entries[102].CompletionRuntimeSeconds)
+		require.Equal(t, int64(57700), entries[103].CompletionRuntimeSeconds, "unaffected slot retains its timer")
+	}
+	ecs.GetResource[ecs.TimeState](f.w).RuntimeSecondsTotal = 150
+	require.True(t, move(root, root, 1, 0, false).Success)
+	assertDeadlines(57750, 57700)
+	require.Equal(t, uint8(1), f.entries(t)[101].InputX)
+	ecs.GetResource[ecs.TimeState](f.w).RuntimeSecondsTotal = 175
+	require.True(t, move(root, root, 1, 0, false).Success)
+	assertDeadlines(57750, 57700)
+	require.False(t, move(root, root, 9, 0, false).Success)
+	require.False(t, move(root, root, 0, 1, false).Success)
+	assertDeadlines(57750, 57700)
+	ecs.GetResource[ecs.TimeState](f.w).RuntimeSecondsTotal = 200
+	require.True(t, move(root, root, 0, 1, true).Success)
+	assertDeadlines(57800, 57800)
+	require.Equal(t, uint8(0), f.entries(t)[101].InputX)
+	require.Equal(t, uint8(1), f.entries(t)[101].InputY)
+	require.Equal(t, uint8(1), f.entries(t)[102].InputX)
+	ecs.GetResource[ecs.TimeState](f.w).RuntimeSecondsTotal = 250
+	require.True(t, move(root, hand, 0, 0, false).Success)
+	require.NotContains(t, f.entries(t), types.EntityID(101))
+	require.True(t, move(hand, root, 0, 1, false).Success)
+	assertDeadlines(57850, 57800)
+}
+
+func TestDryingFrameFinishedSeedWithdrawalMarksChunkDirty(t *testing.T) {
+	f := setupLiveDryingFrame(t)
+	f.addInput(101, 10, 0, 0)
+	f.addInput(102, 20, 1, 0)
+	ecs.GetResource[ecs.TimeState](f.w).RuntimeSecondsTotal = 57700
+	systems.NewBehaviorTickSystem(nil, systems.BehaviorTickSystemConfig{
+		BehaviorRegistry: f.registry, ExecutionDeps: f.deps,
+	}).Update(f.w, 0)
+	before, found := ecs.GetComponent[components.InventoryContainer](f.w, f.root)
+	require.True(t, found)
+	require.Len(t, before.Items, 2)
+	withdrawnID, remainingSeed := before.Items[0].ItemID, before.Items[1]
+	require.Empty(t, f.entries(t))
+	require.Zero(t, ecs.EnsureBehaviorRuntimeSchedule(f.w).PendingCount())
+
+	// Start at a clean persistence checkpoint with the frame closed and only
+	// finished seeds remaining. Inventory changes can no longer change timers.
+	opened := ecs.GetResource[ecs.OpenContainerState](f.w)
+	opened.CloseAllForPlayer(1)
+	opened.CloseAllForPlayer(3)
+	runtime := systems.NewObjectBehaviorSystem(nil, nil, systems.ObjectBehaviorConfig{BehaviorRegistry: f.registry})
+	runtime.Update(f.w, 0)
+	ecs.WithComponent(f.w, f.frame, func(state *components.ObjectInternalState) { state.IsDirty = false })
+	initialState, _ := ecs.GetComponent[components.ObjectInternalState](f.w, f.frame)
+	initialFlags := append([]string(nil), initialState.Flags...)
+	require.Equal(t, []string{"container.has_items", "drying.herbs"}, initialFlags)
+	initialAppearance, _ := ecs.GetComponent[components.Appearance](f.w, f.frame)
+	require.Equal(t, "dframe/herbs", initialAppearance.Resource)
+	ecs.AddComponent(f.w, f.frame, components.ChunkRef{})
+	chunk := core.NewChunk(types.ChunkCoord{}, 1, 0, 16)
+	chunk.Spatial().AddStatic(f.frame, 0, 0)
+	require.False(t, chunk.IsDirty(f.w))
+
+	f.sender.opened = make(map[types.EntityID]*netproto.InventoryState)
+	open := NewOpenContainerService(f.w, nil, f.sender, nil)
+	root := &netproto.InventoryRef{Kind: netproto.InventoryKind_INVENTORY_KIND_GRID, OwnerId: 2}
+	ecs.GetResource[ecs.LinkState](f.w).SetLink(ecs.PlayerLink{PlayerID: 1, PlayerHandle: f.player, TargetID: 2, TargetHandle: f.frame})
+	require.Nil(t, open.HandleOpenRequest(f.w, 1, f.player, root))
+	result := f.executor.ExecuteOperation(f.w, 1, f.player, &netproto.InventoryOp{Kind: &netproto.InventoryOp_Move{Move: &netproto.InventoryMoveSpec{
+		Src: root, Dst: &netproto.InventoryRef{Kind: netproto.InventoryKind_INVENTORY_KIND_GRID, OwnerId: 1},
+		ItemId: uint64(withdrawnID), DstPos: &netproto.GridPos{},
+	}}})
+	require.True(t, result.Success, result.Message)
+	mutationState, _ := ecs.GetComponent[components.ObjectInternalState](f.w, f.frame)
+	// Both commands precede deferred recompute, so container.open never appears
+	// in the computed flags and cannot incidentally mark the frame for saving.
+	require.Nil(t, open.HandleCloseRequest(f.w, 1, f.player, root))
+	runtime.Update(f.w, 0)
+	state, _ := ecs.GetComponent[components.ObjectInternalState](f.w, f.frame)
+	appearance, _ := ecs.GetComponent[components.Appearance](f.w, f.frame)
+	require.Equal(t, initialFlags, state.Flags)
+	require.Equal(t, initialAppearance, appearance)
+	require.Empty(t, f.entries(t))
+	require.Zero(t, ecs.EnsureBehaviorRuntimeSchedule(f.w).PendingCount())
+	require.True(t, mutationState.IsDirty, "committed withdrawal must dirty the owner synchronously even without timer changes")
+	require.True(t, state.IsDirty, "unchanged runtime flags must not erase inventory persistence intent")
+	require.True(t, chunk.IsDirty(f.w), "chunk save filtering must include the changed frame inventory")
+
+	factory := gameworld.NewObjectFactory(nil)
+	saved, err := factory.Serialize(f.w, f.frame)
+	require.NoError(t, err)
+	rows, err := factory.SerializeObjectInventories(f.w, f.frame)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	restoredWorld := ecs.NewWorldForTesting()
+	_, err = factory.BuildForChunk(restoredWorld, saved, rows)
+	require.NoError(t, err)
+	restoredRoot, found := ecs.GetResource[ecs.InventoryRefIndex](restoredWorld).Lookup(constt.InventoryGrid, 2, 0)
+	require.True(t, found)
+	restored, found := ecs.GetComponent[components.InventoryContainer](restoredWorld, restoredRoot)
+	require.True(t, found)
+	require.Equal(t, []components.InvItem{remainingSeed}, restored.Items, "withdrawn seed must stay removed after restore")
+	require.Equal(t, before.Version+1, restored.Version)
+}
+
+func TestDryingFrameCatalogAppearancePriority(t *testing.T) {
+	frame, _ := loadDryingFrameCatalog(t)
+	for _, scenario := range []struct {
+		flags    []string
+		resource string
+	}{
+		{nil, "dframe/empty"},
+		{[]string{"drying.herbs"}, "dframe/herbs"},
+		{[]string{"drying.dried_hide"}, "dframe/dried_hide"},
+		{[]string{"drying.herbs", "drying.dried_hide"}, "dframe/dried_hide_herbs"},
+		{[]string{"drying.raw_hide", "drying.dried_hide"}, "dframe/raw_hide"},
+		{[]string{"drying.herbs", "drying.raw_hide", "drying.dried_hide"}, "dframe/raw_hide_herbs"},
+	} {
+		require.Equal(t, scenario.resource, objectdefs.ResolveAppearanceResource(frame, scenario.flags))
+	}
 }

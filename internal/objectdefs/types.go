@@ -143,11 +143,18 @@ type DryingBehaviorConfig struct {
 }
 
 type DryingProcessConfig struct {
-	InputItemKey, OutputItemKey string
-	DurationSeconds             int64
-	InputTypeID, OutputTypeID   uint32
-	InputWidth, InputHeight     uint8
-	OutputWidth, OutputHeight   uint8
+	InputItemKey            string
+	OutputItemKeys          []string
+	DurationSeconds         int64
+	VisualCategory          string
+	InputTypeID             uint32
+	InputWidth, InputHeight uint8
+	Outputs                 []DryingOutputConfig
+}
+
+type DryingOutputConfig struct {
+	TypeID        uint32
+	Width, Height uint8
 }
 
 func (c *DryingBehaviorConfig) AllowsItemTypeID(typeID uint32) bool {
@@ -155,8 +162,13 @@ func (c *DryingBehaviorConfig) AllowsItemTypeID(typeID uint32) bool {
 		return false
 	}
 	for _, process := range c.Processes {
-		if process.InputTypeID == typeID || process.OutputTypeID == typeID {
+		if process.InputTypeID == typeID {
 			return true
+		}
+		for _, output := range process.Outputs {
+			if output.TypeID == typeID {
+				return true
+			}
 		}
 	}
 	return false

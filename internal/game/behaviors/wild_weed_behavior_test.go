@@ -2,7 +2,6 @@ package behaviors
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
 	"origin/internal/characterattrs"
@@ -15,7 +14,6 @@ import (
 	"origin/internal/types"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func wildWeedFixture(t *testing.T, weed *components.WildWeedBehaviorState) (*ecs.World, types.Handle, types.Handle) {
@@ -26,7 +24,7 @@ func wildWeedFixture(t *testing.T, weed *components.WildWeedBehaviorState) (*ecs
 		DefID: 41, Key: wildWeedItemKey, HP: 100,
 		Components:     &objectdefs.Components{Collider: &objectdefs.ColliderDef{W: 4, H: 4, Layer: 1, Mask: 1}},
 		Behaviors:      map[string]json.RawMessage{wildWeedBehaviorKey: json.RawMessage(`{}`)},
-		WildWeedConfig: &objectdefs.WildWeedBehaviorConfig{SeedOutcomes: []string{"seed_wheat"}},
+		WildWeedConfig: &objectdefs.WildWeedBehaviorConfig{},
 	}}))
 	w := ecs.NewWorldForTesting()
 	ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal = 100
@@ -223,29 +221,34 @@ func TestWildWeedRestoreSchedulesRuntimeAndCatchesUp(t *testing.T) {
 	require.Zero(t, schedule.PendingCount())
 }
 
-func TestWildWeedDefConfigValidatesFutureSeedOutcomes(t *testing.T) {
-	items, err := itemdefs.LoadFromDirectory(filepath.Join("..", "..", "..", "data", "items"), zap.NewNop())
-	require.NoError(t, err)
+func TestWildWeedDefConfigRequiresPlantItemAndPreservesPriority(t *testing.T) {
 	previous := itemdefs.Global()
-	itemdefs.SetGlobalForTesting(items)
 	t.Cleanup(func() { itemdefs.SetGlobalForTesting(previous) })
+	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{{DefID: 41, Key: wildWeedItemKey}}))
 	for _, check := range []struct {
-		config string
-		valid  bool
+		config   string
+		valid    bool
+		priority int
 	}{
-		{`{"seedOutcomes":["seed_wheat","seed_carrot","seed_beet","seed_potato"]}`, true},
-		{`{}`, false},
-		{`{"seedOutcomes":["unknown"]}`, false},
-		{`{"seedOutcomes":["seed_wheat","seed_wheat"]}`, false},
-		{`{"seedOutcomes":["seed_wheat"],"unknown":1}`, false},
+		{`{}`, true, defaultBehaviorPriority},
+		{`{"priority":17}`, true, 17},
+		{`{"seedOutcomes":["seed_wheat"]}`, false, 0},
+		{`{"unknown":1}`, false, 0},
 	} {
 		def := &objectdefs.ObjectDef{}
-		_, err := (wildWeedBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{Def: def, RawConfig: []byte(check.config)})
+		priority, err := (wildWeedBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{Def: def, RawConfig: []byte(check.config)})
 		if check.valid {
 			require.NoError(t, err)
-			require.Len(t, def.WildWeedConfig.SeedOutcomes, 4)
+			require.NotNil(t, def.WildWeedConfig)
+			require.Equal(t, check.priority, priority)
+			require.Equal(t, priority, def.WildWeedConfig.Priority)
 		} else {
 			require.Error(t, err)
 		}
+	}
+	for _, registry := range []*itemdefs.Registry{nil, itemdefs.NewRegistry(nil)} {
+		itemdefs.SetGlobalForTesting(registry)
+		_, err := (wildWeedBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{Def: &objectdefs.ObjectDef{}, RawConfig: []byte(`{}`)})
+		require.Error(t, err)
 	}
 }

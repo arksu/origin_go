@@ -10,13 +10,34 @@
       "hp": 100,
       "contextMenuEvenForOneItem": false,
       "components": {
-        "collider": { "w": 24, "h": 8, "layer": 1, "mask": 1 },
+        "collider": { "w": 8, "h": 20, "layer": 1, "mask": 1 },
         "inventory": [{ "kind": "grid", "key": 0, "w": 2, "h": 2 }]
       },
       "resource": "dframe/empty",
+      "appearance": [
+        { "id": "raw_hide_herbs", "when": { "flags": ["drying.herbs", "drying.raw_hide"] }, "resource": "dframe/raw_hide_herbs" },
+        { "id": "raw_hide", "when": { "flags": ["drying.raw_hide"] }, "resource": "dframe/raw_hide" },
+        { "id": "dried_hide_herbs", "when": { "flags": ["drying.herbs", "drying.dried_hide"] }, "resource": "dframe/dried_hide_herbs" },
+        { "id": "dried_hide", "when": { "flags": ["drying.dried_hide"] }, "resource": "dframe/dried_hide" },
+        { "id": "herbs", "when": { "flags": ["drying.herbs"] }, "resource": "dframe/herbs" }
+      ],
+      "station": {
+        "capabilities": ["drying"],
+        "states": ["ready"],
+        "initialState": "ready"
+      },
       "behaviors": {
         "container": {},
-        "drying": { "processes": [] }
+        "drying": {
+          "processes": [
+            {
+              "inputItemKey": "wild_windsown_weed",
+              "outputItemKeys": ["seed_wheat", "seed_carrot", "seed_beet", "seed_potato"],
+              "durationSeconds": 120,
+              "visualCategory": "herbs"
+            }
+          ]
+        }
       }
     }
   ]

@@ -12,16 +12,21 @@ type DryingBehaviorConfig struct {
 }
 
 type DryingProcessConfig struct {
-	InputItemKey    string `json:"inputItemKey"`
-	OutputItemKey   string `json:"outputItemKey"`
-	DurationSeconds int64  `json:"durationSeconds"`
+	InputItemKey    string   `json:"inputItemKey"`
+	OutputItemKeys  []string `json:"outputItemKeys"`
+	DurationSeconds int64    `json:"durationSeconds"`
+	VisualCategory  string   `json:"visualCategory,omitempty"`
 
-	InputTypeID  uint32 `json:"-"`
-	OutputTypeID uint32 `json:"-"`
-	InputWidth   uint8  `json:"-"`
-	InputHeight  uint8  `json:"-"`
-	OutputWidth  uint8  `json:"-"`
-	OutputHeight uint8  `json:"-"`
+	InputTypeID uint32               `json:"-"`
+	InputWidth  uint8                `json:"-"`
+	InputHeight uint8                `json:"-"`
+	Outputs     []DryingOutputConfig `json:"-"`
+}
+
+type DryingOutputConfig struct {
+	TypeID uint32
+	Width  uint8
+	Height uint8
 }
 
 // DryingBehaviorConfigTarget adds drying without expanding all config targets.

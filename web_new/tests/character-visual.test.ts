@@ -198,6 +198,46 @@ test('paired skeleton sprites share their abdomen anchor and culling includes th
   }
 })
 
+for (const hide of ['raw_hide', 'dried_hide']) {
+  test(`drying frame ${hide} and herbs share one shadow and render herbs above a late-loading hide`, async t => {
+    const resourcePath = `dframe/${hide}_herbs`
+    const resource = ResourceLoader.getResourceDef(resourcePath)!
+    assert.ok(resource)
+    assert.deepEqual(resource.offset, [29, 60])
+    assert.equal(resource.layers.length, 3)
+    assert.equal(resource.layers.filter(layer => layer.shadow).length, 1)
+    const [base, herbs, shadow] = resource.layers
+    assert.equal(base!.img, `obj/dframe/dframe_${hide}.png`)
+    assert.equal(herbs!.img, 'obj/dframe/dframe_herbs.png')
+    assert.equal(shadow!.img, 'obj/dframe/dframe_.png')
+    assert.equal(shadow!.shadow, true)
+    assert.equal(base!.interactive, true)
+    assert.equal(herbs!.interactive, true)
+    assert.equal(shadow!.interactive, undefined)
+    const pending = new Map<string, (texture: Texture) => void>()
+    const textures = new Map<string, Texture>()
+    t.mock.method(ResourceLoader, 'loadTexture', (path: string) => new Promise<Texture>(resolve => pending.set(path, resolve)))
+    for (const layer of resource.layers) {
+      assert.deepEqual(ResourceLoader.resolveLayerPosition(layer, resource), { x: -29, y: -60 })
+      const png = await readFile(resolve('public/assets/game', layer.img!))
+      assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a')
+      if (!layer.shadow) assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [50, 73])
+      textures.set(layer.img!, new Texture({ source: Texture.EMPTY.source }))
+    }
+    const view = new ObjectView({ entityId: 19, typeId: 19, resourcePath, position: { x: 0, y: 0 }, size: { x: 24, y: 8 } })
+    t.after(() => { view.destroy(); for (const texture of textures.values()) texture.destroy() })
+    for (const layer of [herbs!, shadow!, base!]) {
+      pending.get(layer.img!)!(textures.get(layer.img!)!)
+      await new Promise<void>(resolve => setImmediate(resolve))
+    }
+    const container = view.getContainer()
+    container.sortChildren()
+    assert.deepEqual(container.children.map(child => (child as Sprite).texture), [shadow!, base!, herbs!].map(layer => textures.get(layer.img!)))
+    assert.deepEqual(container.children.map(child => [child.x, child.y]), [[-29, -60], [-29, -60], [-29, -60]])
+    assert.equal(view.hasAnimatedFrames(), false)
+  })
+}
+
 test('Hearth Fire resolves reviewed 70-percent flame assets with their shared anchor and timing', async () => {
   const resource = ResourceLoader.getResourceDef('hearth_fire')!
   const campfire = ResourceLoader.getResourceDef('campfire/burning')!

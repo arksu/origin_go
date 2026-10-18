@@ -16,6 +16,8 @@ type DryingBehaviorState struct {
 type DryingItemState struct {
 	InputItemID              types.EntityID `json:"input_item_id"`
 	InputTypeID              uint32         `json:"input_type_id"`
+	InputX                   uint8          `json:"input_x"`
+	InputY                   uint8          `json:"input_y"`
 	CompletionRuntimeSeconds int64          `json:"completion_runtime_seconds"`
 }
 
@@ -29,7 +31,7 @@ func (s *DryingBehaviorState) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("drying state exceeds %d entries", MaxDryingItems)
 	}
 	for i, entry := range decoded.Entries {
-		if entry.InputItemID == 0 || entry.InputTypeID == 0 || entry.CompletionRuntimeSeconds <= 0 {
+		if entry.InputItemID == 0 || entry.InputTypeID == 0 || entry.InputX >= 2 || entry.InputY >= 2 || entry.CompletionRuntimeSeconds <= 0 {
 			return fmt.Errorf("drying state entry %d is invalid", i)
 		}
 		for _, prior := range decoded.Entries[:i] {

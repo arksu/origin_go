@@ -1,7 +1,6 @@
 package world_test
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -38,30 +37,13 @@ func dryingPersistenceRegistry(t *testing.T) *behaviors.Registry {
 		itemdefs.SetGlobalForTesting(previousItems)
 		objectdefs.SetGlobalForTesting(previousObjects)
 	})
-	itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{
-		{DefID: 901, Key: "fixture_wet", Name: "Wet Fixture", Size: itemdefs.Size{W: 1, H: 1}, Resource: "fixture/wet"},
-		{DefID: 902, Key: "fixture_dry", Name: "Dry Fixture", Size: itemdefs.Size{W: 1, H: 1}, Resource: "fixture/dry"},
-	}))
-	registry, err := behaviors.DefaultRegistry()
+	items, err := itemdefs.LoadFromDirectory("../../../data/items", zap.NewNop())
 	require.NoError(t, err)
-	def := objectdefs.ObjectDef{
-		DefID: 19, Key: "fixture_drying_frame", Name: "Fixture Drying Frame", HP: 100, IsStatic: true,
-		Resource: "fixture/frame", BehaviorOrder: []string{"container", "drying"},
-		Components: &objectdefs.Components{Inventory: []objectdefs.InventoryDef{{W: 2, H: 2, Kind: "grid"}}},
-		Behaviors: map[string]json.RawMessage{
-			"container": json.RawMessage(`{}`),
-			"drying":    json.RawMessage(`{"processes":[{"inputItemKey":"fixture_wet","outputItemKey":"fixture_dry","durationSeconds":300}]}`),
-		},
-	}
-	behavior, found := registry.GetBehavior("drying")
-	require.True(t, found)
-	validator, supported := behavior.(contracts.BehaviorDefConfigValidator)
-	require.True(t, supported)
-	_, err = validator.ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{
-		BehaviorKey: "drying", RawConfig: def.Behaviors["drying"], Def: &def,
-	})
+	itemdefs.SetGlobalForTesting(items)
+	registry := behaviors.MustDefaultRegistry()
+	objects, err := objectdefs.LoadFromDirectory("../../../data/objects", registry, zap.NewNop())
 	require.NoError(t, err)
-	objectdefs.SetGlobalForTesting(objectdefs.NewRegistry([]objectdefs.ObjectDef{def}))
+	objectdefs.SetGlobalForTesting(objects)
 	return registry
 }
 
@@ -144,13 +126,20 @@ func TestDryingPersistenceRestoresRuntimeDeadlinesAndContents(t *testing.T) {
 				ID: int64(dryingPersistenceObjectID), TypeID: 19, Quality: 80, Region: 1, Layer: 0,
 				X: 10, Y: 20, ChunkX: 0, ChunkY: 0,
 			}, nil)
+			station, found := ecs.GetComponent[components.StationState](w, frame)
+			require.True(t, found, "legacy frame without a station payload uses the current definition")
+			require.Equal(t, []string{"drying"}, station.Capabilities)
+			require.Equal(t, "ready", station.CurrentState)
+			inputDef, found := itemdefs.Global().GetByKey("wild_windsown_weed")
+			require.True(t, found)
+			outputKeys := []string{"seed_wheat", "seed_carrot", "seed_beet", "seed_potato"}
 			behavior, found := registry.GetBehavior("drying")
 			require.True(t, found)
 			listener, supported := behavior.(contracts.RootInventoryMutationBehavior)
 			require.True(t, supported)
 			inputs := []components.InvItem{
-				{ItemID: 41001, TypeID: 901, Resource: "fixture/wet", Quality: 37, Quantity: 1, W: 1, H: 1, X: 0, Y: 0},
-				{ItemID: 41002, TypeID: 901, Resource: "fixture/wet", Quality: 8, Quantity: 1, W: 1, H: 1, X: 1, Y: 1},
+				{ItemID: 41001, TypeID: uint32(inputDef.DefID), Resource: inputDef.ResolveResource(false), Quality: 37, Quantity: 1, W: 1, H: 1, X: 0, Y: 0},
+				{ItemID: 41002, TypeID: uint32(inputDef.DefID), Resource: inputDef.ResolveResource(false), Quality: 8, Quantity: 1, W: 1, H: 1, X: 1, Y: 1},
 			}
 			root, _ := dryingPersistenceInventory(t, w)
 			for i, input := range inputs {
@@ -168,8 +157,10 @@ func TestDryingPersistenceRestoresRuntimeDeadlinesAndContents(t *testing.T) {
 			}
 			deadlines := dryingPersistenceEntries(t, w, frame)
 			require.Len(t, deadlines, 2)
-			require.Equal(t, int64(400), deadlines[0].CompletionRuntimeSeconds)
-			require.Equal(t, int64(425), deadlines[1].CompletionRuntimeSeconds)
+			require.Equal(t, int64(57700), deadlines[0].CompletionRuntimeSeconds)
+			require.Equal(t, int64(57725), deadlines[1].CompletionRuntimeSeconds)
+			require.Equal(t, uint8(1), deadlines[1].InputX)
+			require.Equal(t, uint8(1), deadlines[1].InputY)
 			require.Equal(t, 1, ecs.EnsureBehaviorRuntimeSchedule(w).PendingCount())
 			setDryingPersistenceTime(w, 200, 5002, wall.Add(100*time.Second))
 			saved, rows := saveDryingPersistenceObject(t, factory, w, frame)
@@ -201,7 +192,7 @@ func TestDryingPersistenceRestoresRuntimeDeadlinesAndContents(t *testing.T) {
 				// any of the saved server-runtime deadline.
 				setDryingPersistenceTime(w, 200, 0, wall.AddDate(1, 0, 0))
 			} else {
-				setDryingPersistenceTime(w, 450, 5003, wall.Add(350*time.Second))
+				setDryingPersistenceTime(w, 57750, 5003, wall.Add(57650*time.Second))
 				system.Update(w, 0.05)
 				require.Zero(t, updates, "unloaded frames have no live work")
 			}
@@ -209,6 +200,9 @@ func TestDryingPersistenceRestoresRuntimeDeadlinesAndContents(t *testing.T) {
 			_, container := dryingPersistenceInventory(t, w)
 			require.Equal(t, inputs, container.Items)
 			require.Equal(t, deadlines, dryingPersistenceEntries(t, w, frame))
+			station, found = ecs.GetComponent[components.StationState](w, frame)
+			require.True(t, found)
+			require.Equal(t, "ready", station.CurrentState)
 			require.EqualValues(t, 3, container.Version)
 			require.Equal(t, 1, ecs.EnsureBehaviorRuntimeSchedule(w).PendingCount())
 			require.Zero(t, updates, "restore schedules overdue work after activation")
@@ -216,30 +210,34 @@ func TestDryingPersistenceRestoresRuntimeDeadlinesAndContents(t *testing.T) {
 			if scenario.restart {
 				system.Update(w, 0.05)
 				require.Zero(t, updates)
-				setDryingPersistenceTime(w, 399, 999999999, wall.AddDate(2, 0, 0))
+				setDryingPersistenceTime(w, 57699, 999999999, wall.AddDate(2, 0, 0))
 				system.Update(w, 0.05)
 				_, container = dryingPersistenceInventory(t, w)
 				require.Equal(t, inputs, container.Items, "ticks and wall time cannot finish the process")
 				require.Equal(t, deadlines, dryingPersistenceEntries(t, w, frame))
-				setDryingPersistenceTime(w, 400, 1, wall.Add(-time.Hour))
+				setDryingPersistenceTime(w, 57700, 1, wall.Add(-time.Hour))
 				system.Update(w, 0.05)
 				_, container = dryingPersistenceInventory(t, w)
-				require.EqualValues(t, 902, container.Items[0].TypeID)
+				output, found := itemdefs.Global().GetByID(int(container.Items[0].TypeID))
+				require.True(t, found)
+				require.Contains(t, outputKeys, output.Key)
 				require.Equal(t, inputs[1], container.Items[1], "second independent deadline remains pending")
 				require.Equal(t, deadlines[1:], dryingPersistenceEntries(t, w, frame))
 				require.Equal(t, 1, updates)
-				setDryingPersistenceTime(w, 425, 2, wall.Add(-time.Hour))
+				setDryingPersistenceTime(w, 57725, 2, wall.Add(-time.Hour))
 			}
 			system.Update(w, 0.05)
 			_, container = dryingPersistenceInventory(t, w)
 			require.Len(t, container.Items, 2)
 			for i, result := range container.Items {
-				require.EqualValues(t, 902, result.TypeID)
+				output, found := itemdefs.Global().GetByID(int(result.TypeID))
+				require.True(t, found)
+				require.Contains(t, outputKeys, output.Key)
 				require.Equal(t, inputs[i].Quality, result.Quality)
 				require.Equal(t, inputs[i].X, result.X)
 				require.Equal(t, inputs[i].Y, result.Y)
 				require.EqualValues(t, 1, result.Quantity)
-				require.Equal(t, "fixture/dry", result.Resource)
+				require.Equal(t, output.ResolveResource(false), result.Resource)
 				require.Equal(t, types.EntityID(50001+i), result.ItemID)
 				require.NotEqual(t, inputs[i].ItemID, result.ItemID)
 			}

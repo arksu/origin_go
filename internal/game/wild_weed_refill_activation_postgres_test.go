@@ -36,7 +36,7 @@ func TestWildWeedRefillCommittedStemActivatesInOccupiedChunkAndGrows(t *testing.
 		DefID: 41, Key: "wild_windsown_weed", HP: 100, IsStatic: true, Resource: "wild_windsown_weed/3",
 		Components: &objectdefs.Components{Collider: &objectdefs.ColliderDef{W: 4, H: 4, Layer: 1, Mask: 1}},
 		Behaviors:  map[string]json.RawMessage{"wild_weed": json.RawMessage(`{}`)}, BehaviorOrder: []string{"wild_weed"},
-		WildWeedConfig: &objectdefs.WildWeedBehaviorConfig{SeedOutcomes: []string{"seed_wheat"}},
+		WildWeedConfig: &objectdefs.WildWeedBehaviorConfig{},
 	}
 	for stage := range 4 {
 		def.Appearance = append(def.Appearance, objectdefs.Appearance{

@@ -16,7 +16,7 @@ func TestObjectDryingStateRoundTripAndBounds(t *testing.T) {
 	internal := components.ObjectInternalState{HP: 42, HasHP: true}
 	components.SetBehaviorState(&internal, "drying", &components.DryingBehaviorState{Entries: []components.DryingItemState{
 		{InputItemID: 101, InputTypeID: 901, CompletionRuntimeSeconds: 300},
-		{InputItemID: 102, InputTypeID: 901, CompletionRuntimeSeconds: 450},
+		{InputItemID: 102, InputTypeID: 901, InputX: 1, InputY: 1, CompletionRuntimeSeconds: 450},
 	}})
 	payload, exists, err := serializePersistentObjectState(internal)
 	require.NoError(t, err)
@@ -29,6 +29,10 @@ func TestObjectDryingStateRoundTripAndBounds(t *testing.T) {
 	drying, ok := runtime.Behaviors["drying"].(*components.DryingBehaviorState)
 	require.True(t, ok)
 	require.Equal(t, int64(450), drying.Entries[1].CompletionRuntimeSeconds)
+	require.Equal(t, uint8(1), drying.Entries[1].InputX)
+	require.Equal(t, uint8(1), drying.Entries[1].InputY)
+	require.Contains(t, string(payload), `"input_x":1`)
+	require.Contains(t, string(payload), `"input_y":1`)
 	for _, raw := range []string{
 		`{"v":1,"behaviors":{"drying":{"entries":[{"input_item_id":0,"input_type_id":1,"completion_runtime_seconds":1}]}}}`,
 		`{"v":1,"behaviors":{"drying":{"entries":[{"input_item_id":1,"input_type_id":1,"completion_runtime_seconds":1},{"input_item_id":1,"input_type_id":1,"completion_runtime_seconds":2}]}}}`,

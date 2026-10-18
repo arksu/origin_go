@@ -124,7 +124,7 @@ For new content creators:
 Examples in this folder:
 - `containers.jsonc` for `container`
 - `trees.jsonc` for `tree` / `take` patterns
-- `drying.jsonc` for `container` + `drying` (currently no live processes)
+- `drying.jsonc` for `container` + `drying` with station metadata (WWW to one random seed)
 
 ### Lift
 
@@ -139,15 +139,29 @@ The catalog gives `log_x` a 24×6 footprint and `log_y` a 6×24 footprint.
 ### Drying
 
 `drying` requires `container` and exactly one 2×2 root grid (key 0). Its
-`processes` list may be empty. Each process uses `inputItemKey`, `outputItemKey`,
-and positive integer `durationSeconds`. Both items must exist and be
-nonstackable grid items without nested inventories; the output dimensions must
-fit inside the input rectangle. Repeated input keys are rejected. Only declared
-inputs and outputs may enter the frame, one item at a time.
+`processes` list may be empty. Each process uses `inputItemKey`, a nonempty
+`outputItemKeys` array, and positive integer `durationSeconds`. A singleton array
+produces a fixed output; otherwise each output is equally likely and selected
+at completion. All items must exist and be nonstackable grid items without
+nested inventories; each output must fit inside the input rectangle. Repeated
+input keys or duplicate outputs in one pool are rejected. Only declared inputs
+and outputs may enter the frame, one item at a time.
+
+Optional `visualCategory` is `herbs` or `hide`. Herbs apply to both input and
+outputs; hide inputs are raw and outputs are dried. Appearance reflects category
+presence, with raw hides taking precedence over dried hides and herbs overlaying
+either. Omitted categories do not affect appearance. The live WWW recipe uses
+`herbs`, lasts 57,600 runtime seconds and chooses one of `seed_wheat`,
+`seed_carrot`, `seed_beet`, `seed_potato`. This recipe owns the seed pool;
+`wild_weed` has no `seedOutcomes` field. Hide recipes are not in the live catalog.
 
 Drying uses fixed recipe duration and preserves input quality. Object quality
-does not affect either. See `docs/features/drying_frame.md` for timer, scheduler
-and persistence semantics.
+does not affect either. Actual moves inside the frame, swaps and removal/return
+restart full deadlines for affected inputs; failed and no-op moves do not.
+The frame also uses top-level `station` metadata: `capabilities: ["drying"]`,
+`states: ["ready"]`, `initialState: "ready"`. Ready means the station is available,
+independently of whether its items have finished drying.
+See `docs/features/drying_frame.md` for timer, scheduler and persistence semantics.
 
 ## Cross-References
 

@@ -2,6 +2,8 @@ package behaviors
 
 import (
 	"encoding/json"
+	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -46,10 +48,15 @@ func dryingTestItems(t *testing.T) {
 
 func newDryingFixture(t *testing.T) *dryingFixture {
 	t.Helper()
+	return newDryingFixtureWithConfig(t, `{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a"],"durationSeconds":10},{"inputItemKey":"wet_b","outputItemKeys":["dry_b"],"durationSeconds":25}]}`)
+}
+
+func newDryingFixtureWithConfig(t *testing.T, raw string) *dryingFixture {
+	t.Helper()
 	dryingTestItems(t)
 	def := dryingTestDefinition()
 	_, err := (dryingBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{
-		Def: def, RawConfig: []byte(`{"processes":[{"inputItemKey":"wet_a","outputItemKey":"dry_a","durationSeconds":10},{"inputItemKey":"wet_b","outputItemKey":"dry_b","durationSeconds":25}]}`),
+		Def: def, RawConfig: []byte(raw),
 	})
 	require.NoError(t, err)
 	previous := objectdefs.Global()
@@ -107,23 +114,38 @@ func TestDryingBehaviorValidatesEmptyAndResolvedProcesses(t *testing.T) {
 	require.Positive(t, priority)
 	require.NotNil(t, def.DryingConfig)
 	require.False(t, def.DryingConfig.AllowsItemTypeID(10))
-	_, err = (dryingBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{Def: def, RawConfig: []byte(`{"processes":[{"inputItemKey":"wet_a","outputItemKey":"dry_a","durationSeconds":300}]}`)})
+	_, err = (dryingBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{Def: def, RawConfig: []byte(`{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a"],"durationSeconds":300}]}`)})
 	require.NoError(t, err)
 	require.True(t, def.DryingConfig.AllowsItemTypeID(10))
 	require.True(t, def.DryingConfig.AllowsItemTypeID(11))
 	require.False(t, def.DryingConfig.AllowsItemTypeID(20))
 	require.EqualValues(t, 300, def.DryingConfig.Processes[0].DurationSeconds)
+	_, err = (dryingBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{Def: def, RawConfig: []byte(`{"processes":[{"inputItemKey":" wet_a ","outputItemKeys":[" dry_a ","dry_b"],"durationSeconds":300,"visualCategory":"herbs"}]}`)})
+	require.NoError(t, err)
+	require.Equal(t, "wet_a", def.DryingConfig.Processes[0].InputItemKey)
+	require.Equal(t, []string{"dry_a", "dry_b"}, def.DryingConfig.Processes[0].OutputItemKeys)
+	require.Equal(t, []objectdefs.DryingOutputConfig{{TypeID: 11, Width: 1, Height: 1}, {TypeID: 21, Width: 1, Height: 1}}, def.DryingConfig.Processes[0].Outputs)
+	require.Equal(t, "herbs", def.DryingConfig.Processes[0].VisualCategory)
+	require.True(t, def.DryingConfig.AllowsItemTypeID(21))
 }
 
 func TestDryingBehaviorRejectsInvalidProcessesAndGrid(t *testing.T) {
 	dryingTestItems(t)
 	for _, raw := range []string{
-		`{"processes":[{"inputItemKey":"missing","outputItemKey":"dry_a","durationSeconds":10}]}`,
-		`{"processes":[{"inputItemKey":"wet_a","outputItemKey":"missing","durationSeconds":10}]}`,
-		`{"processes":[{"inputItemKey":"wet_a","outputItemKey":"dry_a","durationSeconds":0}]}`,
-		`{"processes":[{"inputItemKey":"wet_a","outputItemKey":"dry_a","durationSeconds":-10}]}`,
-		`{"processes":[{"inputItemKey":"wet_a","outputItemKey":"dry_a","durationSeconds":10},{"inputItemKey":"wet_a","outputItemKey":"dry_b","durationSeconds":10}]}`,
-		`{"processes":[{"inputItemKey":"wet_a","outputItemKey":"dry_a","durationSeconds":10,"quantity":5}]}`,
+		`{"processes":[{"inputItemKey":"wet_a","outputItemKey":"dry_a","durationSeconds":10}]}`,
+		`{"processes":[{"inputItemKey":"wet_a","durationSeconds":10}]}`,
+		`{"processes":[{"inputItemKey":"wet_a","outputItemKeys":[],"durationSeconds":10}]}`,
+		`{"processes":[{"inputItemKey":"wet_a","outputItemKeys":null,"durationSeconds":10}]}`,
+		`{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a"," "],"durationSeconds":10}]}`,
+		`{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a"," dry_a "],"durationSeconds":10}]}`,
+		`{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a","missing"],"durationSeconds":10}]}`,
+		`{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a"],"durationSeconds":10,"visualCategory":"unknown"}]}`,
+		`{"processes":[{"inputItemKey":"missing","outputItemKeys":["dry_a"],"durationSeconds":10}]}`,
+		`{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["missing"],"durationSeconds":10}]}`,
+		`{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a"],"durationSeconds":0}]}`,
+		`{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a"],"durationSeconds":-10}]}`,
+		`{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a"],"durationSeconds":10},{"inputItemKey":"wet_a","outputItemKeys":["dry_b"],"durationSeconds":10}]}`,
+		`{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a"],"durationSeconds":10,"quantity":5}]}`,
 	} {
 		_, err := (dryingBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{Def: dryingTestDefinition(), RawConfig: []byte(raw)})
 		require.Error(t, err, raw)
@@ -150,9 +172,36 @@ func TestDryingBehaviorRejectsInvalidProcessesAndGrid(t *testing.T) {
 		output, _ := itemdefs.Global().GetByKey("dry_a")
 		original := *output
 		mutate(output)
-		_, err := (dryingBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{Def: dryingTestDefinition(), RawConfig: []byte(`{"processes":[{"inputItemKey":"wet_a","outputItemKey":"dry_a","durationSeconds":10}]}`)})
+		_, err := (dryingBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{Def: dryingTestDefinition(), RawConfig: []byte(`{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_b","dry_a"],"durationSeconds":10}]}`)})
 		require.Error(t, err)
 		*output = original
+	}
+}
+
+func TestDryingValidatesSharedOutputVisualCategories(t *testing.T) {
+	dryingTestItems(t)
+	for _, categories := range []struct {
+		first, second string
+		valid         bool
+	}{
+		{"herbs", "herbs", true},
+		{"hide", "hide", true},
+		{"", "", true},
+		{"herbs", "hide", false},
+		{"", "hide", false},
+	} {
+		cfg := contracts.DryingBehaviorConfig{Processes: []contracts.DryingProcessConfig{
+			{InputItemKey: "wet_a", OutputItemKeys: []string{"dry_a"}, DurationSeconds: 10, VisualCategory: categories.first},
+			{InputItemKey: "wet_b", OutputItemKeys: []string{"dry_b", "dry_a"}, DurationSeconds: 10, VisualCategory: categories.second},
+		}}
+		raw, err := json.Marshal(cfg)
+		require.NoError(t, err)
+		_, err = (dryingBehavior{}).ValidateAndApplyDefConfig(&contracts.BehaviorDefConfigContext{Def: dryingTestDefinition(), RawConfig: raw})
+		if categories.valid {
+			require.NoError(t, err)
+		} else {
+			require.ErrorContains(t, err, "conflicting visual categories")
+		}
 	}
 }
 
@@ -198,7 +247,7 @@ func TestDryingConvertsFourItemsIndependentlyWithSameQualityAndPosition(t *testi
 	require.Equal(t, 2, f.updates)
 }
 
-func TestDryingPreservesInternalMoveAndRestartsSameTickReinsertion(t *testing.T) {
+func TestDryingRestartsInternalMoveAndSameTickReinsertion(t *testing.T) {
 	f := newDryingFixture(t)
 	item := wetDryingItem(200, 10, 0, 0, 37)
 	f.mutate(t, []components.InvItem{item})
@@ -206,7 +255,8 @@ func TestDryingPreservesInternalMoveAndRestartsSameTickReinsertion(t *testing.T)
 	ecs.SetResource(f.w, ecs.TimeState{RuntimeSecondsTotal: 105, Tick: 100})
 	item.X = 1
 	f.mutate(t, []components.InvItem{item})
-	require.EqualValues(t, 110, f.state(t).Entries[0].CompletionRuntimeSeconds)
+	require.EqualValues(t, 115, f.state(t).Entries[0].CompletionRuntimeSeconds)
+	require.EqualValues(t, 1, f.state(t).Entries[0].InputX)
 	f.mutate(t, nil)
 	require.Empty(t, f.state(t).Entries)
 	require.Zero(t, ecs.EnsureBehaviorRuntimeSchedule(f.w).PendingCount())
@@ -336,4 +386,152 @@ func TestDryingNewInputIdentityStartsFreshDeadline(t *testing.T) {
 	require.EqualValues(t, 201, f.state(t).Entries[0].InputItemID)
 	require.EqualValues(t, 120, f.state(t).Entries[0].CompletionRuntimeSeconds)
 	require.Zero(t, f.updates)
+}
+
+func TestDryingPoolCompletesBatchWithQualityAndPosition(t *testing.T) {
+	f := newDryingFixtureWithConfig(t, `{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a","dry_b"],"durationSeconds":10}]}`)
+	inputs := []components.InvItem{
+		wetDryingItem(200, 10, 0, 0, 0), wetDryingItem(201, 10, 1, 0, 8),
+		wetDryingItem(202, 10, 0, 1, 100), wetDryingItem(203, 10, 1, 1, 37),
+	}
+	f.mutate(t, slices.Clone(inputs))
+	before, _ := ecs.GetComponent[components.InventoryContainer](f.w, f.inventory)
+	require.True(t, f.run(t, 110).StateChanged)
+	after, _ := ecs.GetComponent[components.InventoryContainer](f.w, f.inventory)
+	require.Equal(t, before.Version+1, after.Version)
+	for i, output := range after.Items {
+		require.Contains(t, []uint32{11, 21}, output.TypeID)
+		definition, found := itemdefs.Global().GetByID(int(output.TypeID))
+		require.True(t, found)
+		require.Equal(t, definition.Resource, output.Resource)
+		require.Equal(t, inputs[i].Quality, output.Quality)
+		require.Equal(t, inputs[i].X, output.X)
+		require.Equal(t, inputs[i].Y, output.Y)
+		require.EqualValues(t, 1, output.Quantity)
+		require.EqualValues(t, 1, output.W)
+		require.EqualValues(t, 1, output.H)
+		require.EqualValues(t, 1001+i, output.ItemID)
+	}
+	require.Empty(t, f.state(t).Entries)
+	require.Equal(t, 1, f.updates)
+	require.Zero(t, ecs.EnsureBehaviorRuntimeSchedule(f.w).PendingCount())
+}
+
+func TestDryingValidatesEveryPoolAlternativeBeforeBatchCommit(t *testing.T) {
+	for _, invalid := range []string{"missing", "width", "height", "stack", "container", "grid"} {
+		t.Run(invalid, func(t *testing.T) {
+			f := newDryingFixtureWithConfig(t, `{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a"],"durationSeconds":10},{"inputItemKey":"wet_b","outputItemKeys":["dry_a","dry_b"],"durationSeconds":10}]}`)
+			f.mutate(t, []components.InvItem{wetDryingItem(200, 10, 0, 0, 37), wetDryingItem(201, 20, 1, 0, 39)})
+			before, _ := ecs.GetComponent[components.InventoryContainer](f.w, f.inventory)
+			before.Items = slices.Clone(before.Items)
+			entries := slices.Clone(f.state(t).Entries)
+			ecs.WithComponent(f.w, f.frame, func(internal *components.ObjectInternalState) { internal.IsDirty = false })
+			output, _ := itemdefs.Global().GetByKey("dry_b")
+			switch invalid {
+			case "missing":
+				other, _ := itemdefs.Global().GetByKey("dry_a")
+				itemdefs.SetGlobalForTesting(itemdefs.NewRegistry([]itemdefs.ItemDef{*other}))
+			case "width":
+				output.Size.W = 2
+			case "height":
+				output.Size.H = 2
+			case "stack":
+				output.Stack = &itemdefs.Stack{Mode: itemdefs.StackModeStack, Max: 2}
+			case "container":
+				output.Container = &itemdefs.ContainerDef{}
+			case "grid":
+				denied := false
+				output.Allowed.Grid = &denied
+			}
+			result, err := f.behavior.OnScheduledRuntimeTick(&contracts.BehaviorRuntimeTickContext{World: f.w, Handle: f.frame, EntityID: 100, EntityType: 1, CurrentRuntimeSeconds: 110, Deps: f.deps})
+			require.ErrorContains(t, err, "output definition changed")
+			require.False(t, result.StateChanged)
+			after, _ := ecs.GetComponent[components.InventoryContainer](f.w, f.inventory)
+			require.Equal(t, before, after)
+			require.Equal(t, entries, f.state(t).Entries)
+			internal, _ := ecs.GetComponent[components.ObjectInternalState](f.w, f.frame)
+			require.False(t, internal.IsDirty)
+			require.Zero(t, f.updates)
+			entry, due := ecs.EnsureBehaviorRuntimeSchedule(f.w).PopDue(111)
+			require.True(t, due)
+			require.EqualValues(t, 111, entry.DueRuntimeSeconds)
+		})
+	}
+}
+
+func TestDryingPreparesEveryPossibleFollowupDeadlineBeforeConversion(t *testing.T) {
+	f := newDryingFixtureWithConfig(t, `{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a","wet_b"],"durationSeconds":10},{"inputItemKey":"wet_b","outputItemKeys":["dry_b"],"durationSeconds":25}]}`)
+	f.mutate(t, []components.InvItem{wetDryingItem(200, 10, 0, 0, 37)})
+	before, _ := ecs.GetComponent[components.InventoryContainer](f.w, f.inventory)
+	before.Items = slices.Clone(before.Items)
+	result, err := f.behavior.OnScheduledRuntimeTick(&contracts.BehaviorRuntimeTickContext{World: f.w, Handle: f.frame, EntityID: 100, EntityType: 1, CurrentRuntimeSeconds: math.MaxInt64 - 20, Deps: f.deps})
+	require.ErrorContains(t, err, "runtime overflows")
+	require.False(t, result.StateChanged)
+	after, _ := ecs.GetComponent[components.InventoryContainer](f.w, f.inventory)
+	require.Equal(t, before, after)
+	require.Len(t, f.state(t).Entries, 1)
+	require.Zero(t, f.updates)
+}
+
+func TestDryingNoOpPreservesDeadlinesAndSwapRestartsOnlyMovedItems(t *testing.T) {
+	f := newDryingFixture(t)
+	items := []components.InvItem{wetDryingItem(200, 10, 0, 0, 37), wetDryingItem(201, 20, 1, 0, 39), wetDryingItem(202, 10, 0, 1, 12)}
+	f.mutate(t, slices.Clone(items))
+	original := slices.Clone(f.state(t).Entries)
+	ecs.SetResource(f.w, ecs.TimeState{RuntimeSecondsTotal: 105})
+	f.mutate(t, slices.Clone(items))
+	require.Equal(t, original, f.state(t).Entries)
+	items[0].X, items[1].X = items[1].X, items[0].X
+	f.mutate(t, items)
+	deadlines := make(map[types.EntityID]int64)
+	for _, entry := range f.state(t).Entries {
+		deadlines[entry.InputItemID] = entry.CompletionRuntimeSeconds
+	}
+	require.Equal(t, map[types.EntityID]int64{200: 115, 201: 130, 202: 110}, deadlines)
+	f.run(t, 110)
+	inventory, _ := ecs.GetComponent[components.InventoryContainer](f.w, f.inventory)
+	require.EqualValues(t, 10, inventory.Items[0].TypeID)
+	require.EqualValues(t, 20, inventory.Items[1].TypeID)
+	require.EqualValues(t, 11, inventory.Items[2].TypeID)
+}
+
+func TestDryingVisualFlagsReflectActualInventoryCombinations(t *testing.T) {
+	for mask := 0; mask < 8; mask++ {
+		f := newDryingFixtureWithConfig(t, `{"processes":[{"inputItemKey":"wet_a","outputItemKeys":["dry_a"],"durationSeconds":10,"visualCategory":"herbs"},{"inputItemKey":"wet_b","outputItemKeys":["dry_b"],"durationSeconds":25,"visualCategory":"hide"}]}`)
+		var items []components.InvItem
+		var want []string
+		for i, typeID := range []uint32{10, 20, 21} {
+			if mask&(1<<i) != 0 {
+				items = append(items, wetDryingItem(types.EntityID(200+i), typeID, uint8(i%2), uint8(i/2), 37))
+				want = append(want, []string{"drying.herbs", "drying.raw_hide", "drying.dried_hide"}[i])
+			}
+		}
+		f.mutate(t, items)
+		result := f.behavior.ApplyRuntime(&contracts.BehaviorRuntimeContext{World: f.w, Handle: f.frame, EntityID: 100, EntityType: 1})
+		require.Equal(t, want, result.Flags)
+		f.run(t, 110)
+		result = f.behavior.ApplyRuntime(&contracts.BehaviorRuntimeContext{World: f.w, Handle: f.frame, EntityID: 100, EntityType: 1})
+		require.Equal(t, want, result.Flags, "ready herbs keep the same flag")
+		f.mutate(t, nil)
+		require.Empty(t, f.behavior.ApplyRuntime(&contracts.BehaviorRuntimeContext{World: f.w, Handle: f.frame, EntityID: 100, EntityType: 1}).Flags)
+	}
+}
+
+func TestDryingVisualInputClassificationTakesPrecedence(t *testing.T) {
+	for _, category := range []string{"hide", ""} {
+		cfg := contracts.DryingBehaviorConfig{Processes: []contracts.DryingProcessConfig{
+			{InputItemKey: "wet_a", OutputItemKeys: []string{"wet_b"}, DurationSeconds: 10, VisualCategory: "herbs"},
+			{InputItemKey: "wet_b", OutputItemKeys: []string{"dry_b"}, DurationSeconds: 25, VisualCategory: category},
+		}}
+		raw, err := json.Marshal(cfg)
+		require.NoError(t, err)
+		f := newDryingFixtureWithConfig(t, string(raw))
+		f.mutate(t, []components.InvItem{wetDryingItem(200, 20, 0, 0, 37)})
+		result := f.behavior.ApplyRuntime(&contracts.BehaviorRuntimeContext{World: f.w, Handle: f.frame, EntityID: 100, EntityType: 1})
+		if category == "hide" {
+			require.Equal(t, []string{"drying.raw_hide"}, result.Flags)
+		} else {
+			require.Empty(t, result.Flags)
+		}
+	}
 }

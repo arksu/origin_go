@@ -2,7 +2,6 @@ package behaviors
 
 import (
 	"fmt"
-	"strings"
 
 	"origin/internal/characterattrs"
 	constt "origin/internal/const"
@@ -45,27 +44,12 @@ func (wildWeedBehavior) ValidateAndApplyDefConfig(ctx *contracts.BehaviorDefConf
 	if cfg.Priority <= 0 {
 		cfg.Priority = defaultBehaviorPriority
 	}
-	if len(cfg.SeedOutcomes) == 0 {
-		return 0, fmt.Errorf("wild_weed.seedOutcomes is required")
-	}
 	items := itemdefs.Global()
 	if items == nil {
 		return 0, fmt.Errorf("wild_weed requires loaded item definitions")
 	}
 	if _, found := items.GetByKey(wildWeedItemKey); !found {
 		return 0, fmt.Errorf("wild_weed item %q does not exist", wildWeedItemKey)
-	}
-	for i, outcome := range cfg.SeedOutcomes {
-		outcome = strings.TrimSpace(outcome)
-		if _, found := items.GetByKey(outcome); !found {
-			return 0, fmt.Errorf("wild_weed seed outcome %q does not exist", outcome)
-		}
-		for _, prior := range cfg.SeedOutcomes[:i] {
-			if prior == outcome {
-				return 0, fmt.Errorf("wild_weed repeats seed outcome %q", outcome)
-			}
-		}
-		cfg.SeedOutcomes[i] = outcome
 	}
 	def.SetWildWeedBehaviorConfig(cfg)
 	return cfg.Priority, nil

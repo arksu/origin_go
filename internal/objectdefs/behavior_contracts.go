@@ -67,12 +67,17 @@ func (d *ObjectDef) SetDryingBehaviorConfig(cfg contracts.DryingBehaviorConfig) 
 	}
 	processes := make([]DryingProcessConfig, len(cfg.Processes))
 	for i, process := range cfg.Processes {
+		outputs := make([]DryingOutputConfig, len(process.Outputs))
+		for j, output := range process.Outputs {
+			outputs[j] = DryingOutputConfig{TypeID: output.TypeID, Width: output.Width, Height: output.Height}
+		}
 		processes[i] = DryingProcessConfig{
-			InputItemKey: process.InputItemKey, OutputItemKey: process.OutputItemKey,
+			InputItemKey: process.InputItemKey, OutputItemKeys: append([]string(nil), process.OutputItemKeys...),
 			DurationSeconds: process.DurationSeconds,
-			InputTypeID:     process.InputTypeID, OutputTypeID: process.OutputTypeID,
-			InputWidth: process.InputWidth, InputHeight: process.InputHeight,
-			OutputWidth: process.OutputWidth, OutputHeight: process.OutputHeight,
+			VisualCategory:  process.VisualCategory,
+			InputTypeID:     process.InputTypeID,
+			InputWidth:      process.InputWidth, InputHeight: process.InputHeight,
+			Outputs: outputs,
 		}
 	}
 	d.DryingConfig = &DryingBehaviorConfig{Priority: cfg.Priority, Processes: processes}

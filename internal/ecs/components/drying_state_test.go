@@ -8,7 +8,7 @@ import (
 )
 
 func TestDryingStateRoundTripsRuntimeDeadlineAndItemIdentity(t *testing.T) {
-	original := DryingBehaviorState{Entries: []DryingItemState{{InputItemID: 9007199254740993, InputTypeID: 10, CompletionRuntimeSeconds: 112233}}}
+	original := DryingBehaviorState{Entries: []DryingItemState{{InputItemID: 9007199254740993, InputTypeID: 10, InputX: 1, InputY: 1, CompletionRuntimeSeconds: 112233}}}
 	data, err := json.Marshal(original)
 	require.NoError(t, err)
 	var restored DryingBehaviorState
@@ -18,6 +18,9 @@ func TestDryingStateRoundTripsRuntimeDeadlineAndItemIdentity(t *testing.T) {
 
 func TestDryingStateRejectsUnboundedOrAmbiguousRestoredWork(t *testing.T) {
 	for _, raw := range []string{
+		`{"entries":[{"input_item_id":1,"input_type_id":10,"input_x":2,"completion_runtime_seconds":300}]}`,
+		`{"entries":[{"input_item_id":1,"input_type_id":10,"input_y":2,"completion_runtime_seconds":300}]}`,
+		`{"entries":[{"input_item_id":1,"input_type_id":10,"input_x":-1,"completion_runtime_seconds":300}]}`,
 		`{"entries":[{"input_item_id":0,"input_type_id":10,"completion_runtime_seconds":300}]}`,
 		`{"entries":[{"input_item_id":1,"input_type_id":0,"completion_runtime_seconds":300}]}`,
 		`{"entries":[{"input_item_id":1,"input_type_id":10,"completion_runtime_seconds":0}]}`,

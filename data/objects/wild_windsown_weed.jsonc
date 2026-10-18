@@ -19,9 +19,7 @@
         { "id": "mature", "when": { "flags": ["wild_weed.stage3"] }, "resource": "wild_windsown_weed/3" }
       ],
       "behaviors": {
-        "wild_weed": {
-          "seedOutcomes": ["seed_wheat", "seed_carrot", "seed_beet", "seed_potato"]
-        }
+        "wild_weed": {}
       }
     }
   ]
