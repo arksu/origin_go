@@ -67,7 +67,14 @@ func TestWildWeedPostgresConcurrentDeletionAndIdempotentRetry(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 4, spots[0].Revision)
 	require.EqualValues(t, 300, spots[0].LastRuntimeSeconds)
-	require.JSONEq(t, `{"unknown":{"n":9007199254740993},"www":{"note":"preserved","objects":{}}}`, string(spots[0].State))
+	var manifest struct {
+		WWW struct {
+			LastCheck int64 `json:"last_check_runtime_seconds"`
+		} `json:"www"`
+	}
+	require.NoError(t, json.Unmarshal(spots[0].State, &manifest))
+	require.Contains(t, []int64{200, 300}, manifest.WWW.LastCheck, "the first actual deletion initializes the marker; the next deletion preserves it")
+	require.JSONEq(t, fmt.Sprintf(`{"unknown":{"n":9007199254740993},"www":{"note":"preserved","objects":{},"last_check_runtime_seconds":%d}}`, manifest.WWW.LastCheck), string(spots[0].State))
 	var document map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(spots[0].State, &document))
 	var unknown map[string]json.RawMessage
@@ -126,7 +133,7 @@ func TestWildWeedPostgresStreamingDeletionRollsBackManifestAndDrops(t *testing.T
 		})
 	require.NoError(t, err)
 	require.EqualValues(t, 3, commit.Snapshot.Revision)
-	require.JSONEq(t, `{"www":{"objects":{}}}`, string(commit.Snapshot.State))
+	require.JSONEq(t, `{"www":{"objects":{},"last_check_runtime_seconds":200}}`, string(commit.Snapshot.State))
 	_, err = db.Queries().GetObjectByID(t.Context(), int64(source))
 	require.ErrorIs(t, err, sql.ErrNoRows)
 	_, err = db.Queries().GetObjectByID(t.Context(), 9911)

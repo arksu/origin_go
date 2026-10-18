@@ -153,7 +153,7 @@ func TestWildWeedAdminPostgresAmbiguousCommitCannotResurrect(t *testing.T) {
 				require.Len(t, rows, 1)
 				require.EqualValues(t, 3, rows[0].Revision)
 				require.EqualValues(t, 10, rows[0].LastRuntimeSeconds)
-				require.JSONEq(t, `{"www":{"objects":{}}}`, string(rows[0].State))
+				require.JSONEq(t, `{"www":{"objects":{},"last_check_runtime_seconds":10}}`, string(rows[0].State))
 				return rows[0]
 			}
 			assertDeleted()

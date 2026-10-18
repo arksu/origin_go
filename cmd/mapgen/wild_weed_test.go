@@ -52,7 +52,7 @@ func TestWildWeedCoordinateGap(t *testing.T) {
 
 func TestWildWeedTargetQualityAndOwnership(t *testing.T) {
 	spot := repository.Spot{ID: 1, CenterX: 1000, CenterY: 1000, Radius: 64 * 12, PeakQuality: 50, DistrictX: 1}
-	require.Equal(t, 128, wildWeedTarget(spot, 12))
+	require.Equal(t, 5, wildWeedTarget(spot, 12))
 	for _, test := range []struct {
 		point   wildWeedPosition
 		quality int16
@@ -157,7 +157,7 @@ func TestWildWeedMapgenPostgresManifestAndCheckpoint(t *testing.T) {
 		generated, err = generator.writeWildWeeds(ctx, queries)
 		return err
 	}))
-	require.Equal(t, 128, generated)
+	require.Equal(t, 5, generated)
 	spots, err := db.Queries().LoadSpotsByRegion(ctx, 1)
 	require.NoError(t, err)
 	require.Len(t, spots, 1)

@@ -27,3 +27,9 @@ TRUNCATE TABLE chunk;
 
 -- name: DeleteChunksByRegion :exec
 DELETE FROM chunk WHERE region = $1;
+
+-- name: IncrementChunkEntityCount :execrows
+-- Runtime object insertion must not overwrite a concurrently saved terrain snapshot.
+UPDATE chunk SET entity_count = COALESCE(entity_count, 0) + sqlc.arg(count)::int
+WHERE region = sqlc.arg(region)::int AND x = sqlc.arg(x)::int
+  AND y = sqlc.arg(y)::int AND layer = sqlc.arg(layer)::int;

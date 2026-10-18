@@ -148,6 +148,9 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		if spotErr != nil {
 			logger.Fatal("Failed to load spots", zap.Error(spotErr))
 		}
+		if spotErr = s.spotManager.EnableWildWeedRefill(s.chunkManager, entityIDManager); spotErr != nil {
+			logger.Fatal("Failed to configure WWW refill", zap.Error(spotErr))
+		}
 	}
 	positionObservers := core.PositionObservers{colliderSpatial, s.soundEvents}
 	s.chunkManager.SetPositionObserver(positionObservers)

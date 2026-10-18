@@ -96,6 +96,35 @@ func (q *Queries) GetChunksByRegion(ctx context.Context, region int) ([]Chunk, e
 	return items, nil
 }
 
+const incrementChunkEntityCount = `-- name: IncrementChunkEntityCount :execrows
+UPDATE chunk SET entity_count = COALESCE(entity_count, 0) + $1::int
+WHERE region = $2::int AND x = $3::int
+  AND y = $4::int AND layer = $5::int
+`
+
+type IncrementChunkEntityCountParams struct {
+	Count  int `json:"count"`
+	Region int `json:"region"`
+	X      int `json:"x"`
+	Y      int `json:"y"`
+	Layer  int `json:"layer"`
+}
+
+// Runtime object insertion must not overwrite a concurrently saved terrain snapshot.
+func (q *Queries) IncrementChunkEntityCount(ctx context.Context, arg IncrementChunkEntityCountParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, incrementChunkEntityCount,
+		arg.Count,
+		arg.Region,
+		arg.X,
+		arg.Y,
+		arg.Layer,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const truncateChunks = `-- name: TruncateChunks :exec
 TRUNCATE TABLE chunk
 `

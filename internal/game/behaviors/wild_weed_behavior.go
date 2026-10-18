@@ -22,7 +22,7 @@ const (
 	wildWeedItemKey             = "wild_windsown_weed"
 	wildWeedActionID            = "pick"
 	wildWeedMatureStage         = 3
-	wildWeedGrowthSeconds int64 = 8 * 60 * 60
+	wildWeedGrowthSeconds int64 = contracts.WildWeedGrowthSeconds
 )
 
 type wildWeedBehavior struct{}

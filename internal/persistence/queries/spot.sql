@@ -38,7 +38,12 @@ WHERE id = sqlc.arg(id)::bigint AND region = sqlc.arg(region)::int
 -- Modify the current JSON row under PostgreSQL's row lock. Independent deletes
 -- never replace each other's manifests; an ambiguous-commit retry is a no-op.
 UPDATE spot
-SET state = state #- ARRAY['www', 'objects', sqlc.arg(object_id)::text],
+SET state = CASE
+		WHEN jsonb_exists(state -> 'www' -> 'objects', sqlc.arg(object_id)::text)
+			AND NOT jsonb_exists(state -> 'www', 'last_check_runtime_seconds')
+		THEN jsonb_set(state #- ARRAY['www', 'objects', sqlc.arg(object_id)::text],
+			'{www,last_check_runtime_seconds}', to_jsonb(sqlc.arg(runtime_seconds)::bigint))
+		ELSE state #- ARRAY['www', 'objects', sqlc.arg(object_id)::text] END,
 	revision = revision + CASE
 		WHEN jsonb_exists(state -> 'www' -> 'objects', sqlc.arg(object_id)::text) THEN 1
 		ELSE 0 END,
@@ -53,3 +58,35 @@ WHERE id = sqlc.arg(id)::bigint AND region = sqlc.arg(region)::int
 	AND (revision < 9223372036854775807
 		OR NOT jsonb_exists(state -> 'www' -> 'objects', sqlc.arg(object_id)::text))
 RETURNING state, revision, last_runtime_seconds;
+
+-- name: LockWildWeedSpot :one
+-- Serializes refill deltas with destruction without replacing a stale snapshot.
+SELECT * FROM spot
+WHERE id = sqlc.arg(id)::bigint AND region = sqlc.arg(region)::int
+	AND spot_type = 'www'
+	AND jsonb_typeof(state -> 'www') = 'object'
+	AND jsonb_typeof(state -> 'www' -> 'objects') = 'object'
+FOR UPDATE;
+
+-- name: RefillWildWeedSpotState :one
+WITH merged AS (
+	SELECT id, (state -> 'www' -> 'objects') || sqlc.arg(objects)::jsonb AS objects
+	FROM spot WHERE id = sqlc.arg(id)::bigint AND region = sqlc.arg(region)::int
+), changed AS (
+	SELECT spot.id, jsonb_set(state, '{www}',
+		CASE WHEN (SELECT count(*) FROM jsonb_object_keys(merged.objects)) >= sqlc.arg(target)::int
+			THEN ((state -> 'www') || jsonb_build_object('objects', merged.objects)) - 'last_check_runtime_seconds'
+			ELSE (state -> 'www') || jsonb_build_object('objects', merged.objects,
+				'last_check_runtime_seconds', GREATEST(
+					COALESCE((state -> 'www' ->> 'last_check_runtime_seconds')::bigint, 0),
+					sqlc.arg(check_runtime_seconds)::bigint)) END) AS state
+	FROM spot JOIN merged USING (id)
+)
+UPDATE spot SET state = changed.state,
+	revision = revision + CASE WHEN spot.state IS DISTINCT FROM changed.state THEN 1 ELSE 0 END,
+	last_runtime_seconds = CASE WHEN spot.state IS DISTINCT FROM changed.state
+		THEN GREATEST(last_runtime_seconds, sqlc.arg(runtime_seconds)::bigint)
+		ELSE last_runtime_seconds END
+FROM changed WHERE spot.id = changed.id
+	AND (revision < 9223372036854775807 OR spot.state = changed.state)
+RETURNING spot.state, revision, last_runtime_seconds;

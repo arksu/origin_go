@@ -46,7 +46,11 @@ func TestLoadSpotsConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, definition := range config.Spots {
-		if definition.PeakQualityMin != 20 || definition.PeakQualityMax != 50 {
+		wantMax := int64(50)
+		if definition.Type == "www" {
+			wantMax = 16
+		}
+		if definition.PeakQualityMin != 10 || definition.PeakQualityMax != wantMax {
 			t.Fatalf("unexpected quality defaults for %s: %+v", definition.Type, definition)
 		}
 		if definition.Type == "water" {

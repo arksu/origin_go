@@ -47,10 +47,12 @@ type SpotStateSnapshot struct {
 }
 
 type managedSpot struct {
-	info    SpotInfo
-	state   SpotStateSnapshot
-	pending *spotStateJob
-	saveErr error
+	info        SpotInfo
+	state       SpotStateSnapshot
+	pending     *spotStateJob
+	saveErr     error
+	wwwRevision int64
+	wwwState    wildWeedManifest
 }
 
 // SpotManager is owned by the surface shard. State reads, saves and Update must
@@ -68,6 +70,9 @@ type SpotManager struct {
 	nextPending        int
 	stopped            bool
 	err                error
+	www                *wildWeedRefillRuntime
+	wwwSpots           []*managedSpot
+	nextWWW            int
 }
 
 func NewSpotManager(ctx context.Context, cfg *config.Config, store SpotStore, submit func(PersistenceJob) bool, logger *zap.Logger) (*SpotManager, error) {
@@ -121,6 +126,9 @@ func NewSpotManager(ctx context.Context, cfg *config.Config, store SpotStore, su
 		}
 		m.byID[row.ID] = spot
 		m.indexSpot(spot.info)
+		if row.SpotType == "www" {
+			m.wwwSpots = append(m.wwwSpots, spot)
+		}
 	}
 	return m, nil
 }

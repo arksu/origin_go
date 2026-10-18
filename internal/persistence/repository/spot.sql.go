@@ -23,7 +23,12 @@ func (q *Queries) DeleteSpotsByRegion(ctx context.Context, region int) error {
 
 const deleteWildWeedSpotObject = `-- name: DeleteWildWeedSpotObject :one
 UPDATE spot
-SET state = state #- ARRAY['www', 'objects', $1::text],
+SET state = CASE
+		WHEN jsonb_exists(state -> 'www' -> 'objects', $1::text)
+			AND NOT jsonb_exists(state -> 'www', 'last_check_runtime_seconds')
+		THEN jsonb_set(state #- ARRAY['www', 'objects', $1::text],
+			'{www,last_check_runtime_seconds}', to_jsonb($2::bigint))
+		ELSE state #- ARRAY['www', 'objects', $1::text] END,
 	revision = revision + CASE
 		WHEN jsonb_exists(state -> 'www' -> 'objects', $1::text) THEN 1
 		ELSE 0 END,
@@ -150,6 +155,95 @@ func (q *Queries) LoadSpotsByRegion(ctx context.Context, region int) ([]Spot, er
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockWildWeedSpot = `-- name: LockWildWeedSpot :one
+SELECT id, region, layer, spot_type, district_x, district_y, center_x, center_y, radius, peak_quality, state, last_runtime_seconds, revision FROM spot
+WHERE id = $1::bigint AND region = $2::int
+	AND spot_type = 'www'
+	AND jsonb_typeof(state -> 'www') = 'object'
+	AND jsonb_typeof(state -> 'www' -> 'objects') = 'object'
+FOR UPDATE
+`
+
+type LockWildWeedSpotParams struct {
+	ID     int64 `json:"id"`
+	Region int   `json:"region"`
+}
+
+// Serializes refill deltas with destruction without replacing a stale snapshot.
+func (q *Queries) LockWildWeedSpot(ctx context.Context, arg LockWildWeedSpotParams) (Spot, error) {
+	row := q.db.QueryRowContext(ctx, lockWildWeedSpot, arg.ID, arg.Region)
+	var i Spot
+	err := row.Scan(
+		&i.ID,
+		&i.Region,
+		&i.Layer,
+		&i.SpotType,
+		&i.DistrictX,
+		&i.DistrictY,
+		&i.CenterX,
+		&i.CenterY,
+		&i.Radius,
+		&i.PeakQuality,
+		&i.State,
+		&i.LastRuntimeSeconds,
+		&i.Revision,
+	)
+	return i, err
+}
+
+const refillWildWeedSpotState = `-- name: RefillWildWeedSpotState :one
+WITH merged AS (
+	SELECT id, (state -> 'www' -> 'objects') || $2::jsonb AS objects
+	FROM spot WHERE id = $3::bigint AND region = $4::int
+), changed AS (
+	SELECT spot.id, jsonb_set(state, '{www}',
+		CASE WHEN (SELECT count(*) FROM jsonb_object_keys(merged.objects)) >= $5::int
+			THEN ((state -> 'www') || jsonb_build_object('objects', merged.objects)) - 'last_check_runtime_seconds'
+			ELSE (state -> 'www') || jsonb_build_object('objects', merged.objects,
+				'last_check_runtime_seconds', GREATEST(
+					COALESCE((state -> 'www' ->> 'last_check_runtime_seconds')::bigint, 0),
+					$6::bigint)) END) AS state
+	FROM spot JOIN merged USING (id)
+)
+UPDATE spot SET state = changed.state,
+	revision = revision + CASE WHEN spot.state IS DISTINCT FROM changed.state THEN 1 ELSE 0 END,
+	last_runtime_seconds = CASE WHEN spot.state IS DISTINCT FROM changed.state
+		THEN GREATEST(last_runtime_seconds, $1::bigint)
+		ELSE last_runtime_seconds END
+FROM changed WHERE spot.id = changed.id
+	AND (revision < 9223372036854775807 OR spot.state = changed.state)
+RETURNING spot.state, revision, last_runtime_seconds
+`
+
+type RefillWildWeedSpotStateParams struct {
+	RuntimeSeconds      int64           `json:"runtime_seconds"`
+	Objects             json.RawMessage `json:"objects"`
+	ID                  int64           `json:"id"`
+	Region              int             `json:"region"`
+	Target              int             `json:"target"`
+	CheckRuntimeSeconds int64           `json:"check_runtime_seconds"`
+}
+
+type RefillWildWeedSpotStateRow struct {
+	State              json.RawMessage `json:"state"`
+	Revision           int64           `json:"revision"`
+	LastRuntimeSeconds int64           `json:"last_runtime_seconds"`
+}
+
+func (q *Queries) RefillWildWeedSpotState(ctx context.Context, arg RefillWildWeedSpotStateParams) (RefillWildWeedSpotStateRow, error) {
+	row := q.db.QueryRowContext(ctx, refillWildWeedSpotState,
+		arg.RuntimeSeconds,
+		arg.Objects,
+		arg.ID,
+		arg.Region,
+		arg.Target,
+		arg.CheckRuntimeSeconds,
+	)
+	var i RefillWildWeedSpotStateRow
+	err := row.Scan(&i.State, &i.Revision, &i.LastRuntimeSeconds)
+	return i, err
 }
 
 const saveSpotState = `-- name: SaveSpotState :execrows

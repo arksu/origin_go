@@ -12,6 +12,7 @@ import (
 
 	_const "origin/internal/const"
 	"origin/internal/ecs/components"
+	"origin/internal/game/world/wildweed"
 	"origin/internal/objectdefs"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
@@ -20,16 +21,12 @@ import (
 )
 
 const (
-	wildWeedObjectKey = "wild_windsown_weed"
-	wildWeedMinGap    = 20
+	wildWeedObjectKey = wildweed.ObjectKey
+	wildWeedMinGap    = wildweed.MinGap
 	wildWeedSeedSalt  = uint64(0xE8BA4A1963D5702F)
-	wildWeedChance    = 0.0003
 )
 
-type wildWeedPosition struct {
-	X int `json:"x"`
-	Y int `json:"y"`
-}
+type wildWeedPosition = wildweed.Position
 
 // This grid only lives while filling one spot. Queries inspect nine small
 // buckets, rather than every object in the spot for every candidate tile.
@@ -53,8 +50,7 @@ func (grid wildWeedPositionGrid) allows(point wildWeedPosition) bool {
 	for cellY := y - 1; cellY <= y+1; cellY++ {
 		for cellX := x - 1; cellX <= x+1; cellX++ {
 			for _, other := range grid[[2]int{cellX, cellY}] {
-				dx, dy := int64(point.X)-int64(other.X), int64(point.Y)-int64(other.Y)
-				if dx*dx+dy*dy < wildWeedMinGap*wildWeedMinGap {
+				if !wildweed.Separated(point, other) {
 					return false
 				}
 			}
@@ -73,28 +69,25 @@ func (g *MapGenerator) wildWeedDefinition() (*objectdefs.ObjectDef, error) {
 }
 
 func wildWeedTarget(spot repository.Spot, coordPerTile int) int {
-	radiusTiles := float64(spot.Radius) / float64(coordPerTile)
-	return int(math.Floor(wildWeedChance * math.Pi * radiusTiles * radiusTiles))
+	return wildweed.Target(spot.Radius, coordPerTile)
 }
 
 func wildWeedQuality(spot repository.Spot, point wildWeedPosition) (int16, bool) {
-	dx, dy := int64(point.X)-int64(spot.CenterX), int64(point.Y)-int64(spot.CenterY)
-	if dx*dx+dy*dy > int64(spot.Radius)*int64(spot.Radius) {
-		return 0, false
-	}
-	distance := math.Hypot(float64(dx), float64(dy))
-	return int16(10 + math.Floor(float64(spot.PeakQuality-10)*(1-distance/float64(spot.Radius)))), true
+	return wildweed.Quality(wildWeedSpot(spot), point)
+}
+
+func wildWeedSpot(spot repository.Spot) wildweed.Spot {
+	return wildweed.Spot{ID: spot.ID, DistrictX: spot.DistrictX, DistrictY: spot.DistrictY,
+		CenterX: spot.CenterX, CenterY: spot.CenterY, Radius: spot.Radius, PeakQuality: spot.PeakQuality}
 }
 
 func wildWeedOwnsPoint(spot repository.Spot, overlaps []repository.Spot, point wildWeedPosition) bool {
-	quality, inside := wildWeedQuality(spot, point)
+	_, inside := wildWeedQuality(spot, point)
 	if !inside {
 		return false
 	}
 	for _, other := range overlaps {
-		otherQuality, otherInside := wildWeedQuality(other, point)
-		if otherInside && (otherQuality > quality || otherQuality == quality &&
-			(other.DistrictY < spot.DistrictY || other.DistrictY == spot.DistrictY && other.DistrictX < spot.DistrictX)) {
+		if wildweed.Prefer(wildWeedSpot(other), wildWeedSpot(spot), point) {
 			return false
 		}
 	}
@@ -114,9 +107,7 @@ func wildWeedCandidates(ctx context.Context, terrain *TerrainPrecompute, spot re
 			return nil, err
 		}
 		for x := minX; x <= maxX; x++ {
-			switch terrain.Tiles[tileIndex(x, y, terrain.WidthTiles)] {
-			case 20, 25, 35, 50:
-			default:
+			if !wildweed.AllowedTile(terrain.Tiles[tileIndex(x, y, terrain.WidthTiles)]) {
 				continue
 			}
 			point := wildWeedPosition{X: x*coordPerTile + coordPerTile/2, Y: y*coordPerTile + coordPerTile/2}

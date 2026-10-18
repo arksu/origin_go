@@ -243,6 +243,57 @@ func (q *Queries) InsertSkullClaimSourceIfMissing(ctx context.Context, arg Inser
 	return err
 }
 
+const insertWildWeedObject = `-- name: InsertWildWeedObject :execrows
+INSERT INTO object (
+	id, type_id, region, x, y, layer, chunk_x, chunk_y,
+	heading, quality, hp, owner_id, data, create_tick, last_tick
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+ON CONFLICT (region, id) DO NOTHING
+`
+
+type InsertWildWeedObjectParams struct {
+	ID         int64                 `json:"id"`
+	TypeID     int                   `json:"type_id"`
+	Region     int                   `json:"region"`
+	X          int                   `json:"x"`
+	Y          int                   `json:"y"`
+	Layer      int                   `json:"layer"`
+	ChunkX     int                   `json:"chunk_x"`
+	ChunkY     int                   `json:"chunk_y"`
+	Heading    sql.NullInt16         `json:"heading"`
+	Quality    int16                 `json:"quality"`
+	Hp         sql.NullFloat64       `json:"hp"`
+	OwnerID    sql.NullInt64         `json:"owner_id"`
+	Data       pqtype.NullRawMessage `json:"data"`
+	CreateTick int64                 `json:"create_tick"`
+	LastTick   int64                 `json:"last_tick"`
+}
+
+func (q *Queries) InsertWildWeedObject(ctx context.Context, arg InsertWildWeedObjectParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertWildWeedObject,
+		arg.ID,
+		arg.TypeID,
+		arg.Region,
+		arg.X,
+		arg.Y,
+		arg.Layer,
+		arg.ChunkX,
+		arg.ChunkY,
+		arg.Heading,
+		arg.Quality,
+		arg.Hp,
+		arg.OwnerID,
+		arg.Data,
+		arg.CreateTick,
+		arg.LastTick,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const softDeleteObject = `-- name: SoftDeleteObject :one
 UPDATE object
 SET deleted_at = NOW()
