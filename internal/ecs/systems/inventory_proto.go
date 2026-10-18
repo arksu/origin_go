@@ -86,6 +86,7 @@ func BuildItemInstanceProto(item InventoryItemState) *netproto.ItemInstance {
 		Quantity: item.Quantity,
 		W:        uint32(item.W),
 		H:        uint32(item.H),
+		Progress: item.Progress,
 	}
 
 	if item.HintExt != "" {

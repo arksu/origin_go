@@ -3,6 +3,7 @@ import { computed, ref, onUnmounted, watch } from 'vue'
 import { INVENTORY_GRID } from '@/constants/inventoryLayout'
 import { proto } from '@/network/proto/packets.js'
 import { useInventoryDrag } from '@/composables/useInventoryDrag'
+import { useItemProgress } from '@/composables/useItemProgress'
 
 interface Props {
   item: {
@@ -27,6 +28,7 @@ const tooltipX = ref(0)
 const tooltipY = ref(0)
 
 const qualityText = computed(() => String(props.item.instance.quality ?? 0))
+const progress = useItemProgress(() => props.item.instance.progress)
 
 const tooltipText = computed(() => {
   const name = props.item.instance.name || 'Unknown Item'
@@ -37,6 +39,10 @@ const tooltipText = computed(() => {
     // Split on \r\n and join with \n
     const lines = hintExt.split('\r\n')
     text += '\n' + lines.join('\n')
+  }
+  if (progress.value) {
+    text += `\nTime remaining: ${progress.value.remainingText}`
+    if (progress.value.paused) text += '\nPaused'
   }
   return text
 })
@@ -64,6 +70,11 @@ const onMouseLeave = () => {
 }
 
 let tooltipElement: HTMLDivElement | null = null
+let tooltipContent: HTMLPreElement | null = null
+
+watch(tooltipText, text => {
+  if (tooltipContent) tooltipContent.textContent = text
+})
 
 // Cleanup tooltip when component is unmounted (item deleted)
 onUnmounted(() => {
@@ -80,9 +91,9 @@ const createTooltip = () => {
 
   tooltipElement = document.createElement('div')
   tooltipElement.className = 'item-tooltip-global'
-  const content = document.createElement('pre')
-  content.textContent = tooltipText.value
-  tooltipElement.appendChild(content)
+  tooltipContent = document.createElement('pre')
+  tooltipContent.textContent = tooltipText.value
+  tooltipElement.appendChild(tooltipContent)
   document.body.appendChild(tooltipElement)
 }
 
@@ -90,6 +101,7 @@ const removeTooltip = () => {
   if (tooltipElement) {
     document.body.removeChild(tooltipElement)
     tooltipElement = null
+    tooltipContent = null
   }
 }
 
@@ -146,6 +158,12 @@ const onContextmenu = () => {
       class="item-image"
       draggable="false"
     >
+    <span
+      v-if="progress"
+      class="item-progress"
+      aria-hidden="true"
+      :style="{ background: `conic-gradient(from 0deg, transparent 0turn ${progress.completedFraction}turn, rgba(0, 0, 0, 0.4) ${progress.completedFraction}turn 1turn)` }"
+    />
     <span class="item-quality">{{ qualityText }}</span>
   </div>
 </template>
@@ -163,6 +181,12 @@ const onContextmenu = () => {
 
 .item-container--draggable {
   touch-action: none;
+}
+
+.item-progress {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 .item-quality {

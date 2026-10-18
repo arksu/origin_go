@@ -58,5 +58,5 @@ func broadcastRootInventoryUpdate(w *ecs.World, service *OpenContainerService, r
 	if !found || container.OwnerID != rootID || container.Kind != constt.InventoryGrid || container.Key != 0 {
 		return
 	}
-	service.BroadcastInventoryUpdates(w, 0, []*netproto.InventoryState{buildInventoryStateFromContainer(w, container)})
+	service.BroadcastInventoryUpdates(w, 0, []*netproto.InventoryState{service.buildInventoryStateFromContainer(w, container)})
 }

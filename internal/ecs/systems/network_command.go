@@ -109,6 +109,7 @@ type InventoryItemState struct {
 	X, Y      uint8
 	EquipSlot netproto.EquipSlot
 	HintExt   string
+	Progress  *netproto.ItemProgress
 
 	// NestedRef points to the nested inventory if this item is a container.
 	// The actual state is sent separately on open/change, not inlined.

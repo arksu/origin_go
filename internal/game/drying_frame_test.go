@@ -175,8 +175,10 @@ func setupLiveDryingFrame(t *testing.T) dryingFrameFixture {
 	}
 	sender := &dryingFrameSender{updated: make(map[types.EntityID][]*netproto.InventoryState)}
 	open := NewOpenContainerService(w, nil, sender, nil)
+	open.SetBehaviorRegistry(registry)
 	deps := &contracts.ExecutionDeps{IDAllocator: &dryingFrameIDs{next: 1000}, RootInventoryUpdate: func(w *ecs.World, id types.EntityID) { broadcastRootInventoryUpdate(w, open, id) }}
 	executor := inventory.NewInventoryExecutor(zap.NewNop(), nil, nil, nil, nil)
+	executor.SetBehaviorRegistry(registry)
 	executor.SetRootMutationHook(func(w *ecs.World, id types.EntityID) { notifyRootInventoryMutation(w, registry, deps, id) })
 	process := frame.DryingConfig.Processes[0]
 	outputTypes := make([]uint32, len(process.Outputs))

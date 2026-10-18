@@ -57,8 +57,8 @@ export function getCullRect(viewportRect: AABB, marginTiles: number): AABB {
 
 /**
  * Compute enter/exit rects for hysteresis culling.
- * Enter rect is larger (objects become visible when entering).
- * Exit rect is smaller (objects become invisible only when fully outside).
+ * Enter rect is smaller (hidden objects become visible when entering).
+ * Exit rect is larger (visible objects stay visible until fully outside).
  */
 export function getHysteresisRects(
   viewportRect: AABB,

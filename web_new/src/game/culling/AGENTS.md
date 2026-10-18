@@ -71,10 +71,12 @@ Main controller singleton (`cullingController`):
 ## Hysteresis
 
 To prevent flickering at viewport edges, hysteresis uses two rects:
-- **enterRect** — Larger rect; hidden objects become visible when entering
-- **exitRect** — Smaller rect; visible objects hide only when fully outside
+- **enterRect** — Smaller rect; hidden objects become visible when entering
+- **exitRect** — Larger rect; visible objects hide only when fully outside
 
-Default: `enterMarginTiles = 4`, `exitMarginTiles = 2`
+Default: `enterMarginTiles = 2`, `exitMarginTiles = 4`. `setMarginTiles(tiles)`
+sets the exit margin to `tiles` and the enter margin to `max(0, tiles - 2)`.
+Custom hysteresis margins must keep `exitMarginTiles >= enterMarginTiles`.
 
 ## Bounds Calculation
 
@@ -85,7 +87,10 @@ Bounds computed at build time from tile coordinates, converted to screen space v
 Bounds computed from sprite position and texture dimensions with padding.
 
 ### Objects
-Bounds computed from container position with conservative size estimate based on game object size.
+Bounds combine a conservative game-object size estimate with declared visual
+frame sizes and layer offsets. Static tree growth stages declare `ResourceDef.size`
+from their PNG dimensions so the whole crown is included before textures load.
+The shared size must cover every layer's image; it may overestimate smaller shadows.
 
 ## Integration Points
 

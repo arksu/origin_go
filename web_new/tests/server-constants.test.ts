@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { ServerConstants, serverConstants } from '../src/network/ServerConstants'
 import { GameConnection } from '../src/network/GameConnection'
 import { gameCalendarSync } from '../src/network/GameCalendarSync'
+import { runtimeTimeSync } from '../src/network/RuntimeTimeSync'
 import { timeSync } from '../src/network/TimeSync'
 import { proto } from '../src/network/proto/packets.js'
 import { registerMessageHandlers } from '../src/network/handlers'
@@ -56,8 +57,11 @@ function connectionFixture(t: TestContext) {
   return { connection, connect }
 }
 
-function pong(runtimeSecondsTotal: number | string = 0): proto.IServerMessage {
-  return proto.ServerMessage.fromObject({ pong: { clientTimeMs: Date.now(), serverTimeMs: Date.now(), runtimeSecondsTotal } })
+function pong(socket: FakeSocket, runtimeSecondsTotal: number | string = 0): proto.IServerMessage {
+  return proto.ServerMessage.fromObject({ pong: {
+    clientTimeMs: [...socket.packets].reverse().find(packet => packet.ping)?.ping?.clientTimeMs,
+    serverTimeMs: Date.now(), runtimeSecondsTotal,
+  } })
 }
 
 test('constants validate ranges without fixed defaults, accept false, and remain immutable', () => {
@@ -101,9 +105,13 @@ test('first Pong initializes before world entry; transfers retain constants/cale
   socket.receive({ pong: { clientTimeMs: Date.now(), serverTimeMs: Date.now() } })
   assert.equal(timeSync.isInitialized(), true, 'legacy Pong preserves wall synchronization')
   assert.equal(gameCalendarSync.getCalendar(), null)
+  assert.equal(runtimeTimeSync.getRuntimeMs(), null)
   socket.receive({ serverConstants: { ...serverProfile, tickRate: 25, directionalMovementSupported: false } })
-  socket.receive(pong(364686))
+  connection.sendPing()
+  socket.receive(pong(socket, 364686))
   assert.equal(gameCalendarSync.getCalendar()?.day, 13)
+  const runtimeSample = runtimeTimeSync.getRuntimeMs()
+  assert.notEqual(runtimeSample, null)
   assert.equal(store.worldParams, null)
   const snapshot = serverConstants.getSnapshot()
   socket.receive({ playerEnterWorld: { entityId: 42, streamEpoch: 7 } })
@@ -113,6 +121,7 @@ test('first Pong initializes before world entry; transfers retain constants/cale
   socket.receive({ playerLeaveWorld: {} })
   assert.strictEqual(serverConstants.getSnapshot(), snapshot)
   assert.equal(gameCalendarSync.getCalendar()?.day, 13)
+  assert.equal(runtimeTimeSync.getRuntimeMs(), runtimeSample, 'layer transfers preserve the runtime clock')
   socket.receive({ playerEnterWorld: { entityId: 42, streamEpoch: 8 } })
   assert.equal((store.worldParams as WorldParams | null)?.streamEpoch, 8)
   assert.equal((store.worldParams as WorldParams | null)?.directionalMovementSupported, false)
@@ -122,22 +131,117 @@ test('first Pong initializes before world entry; transfers retain constants/cale
 })
 
 test('Pong keeps the server calendar snapshot independent of wall synchronization', t => {
-  t.mock.timers.enable({ apis: ['Date'], now: 10000 })
-  const { connect } = connectionFixture(t)
+  t.mock.timers.enable({ apis: ['Date'], now: 8000 })
+  let monotonic = 0
+  t.mock.method(performance, 'now', () => monotonic)
+  const { connection, connect } = connectionFixture(t)
   const socket = connect()
   socket.receive({ serverConstants: serverProfile })
+  t.mock.timers.tick(2000)
+  monotonic += 2000
   socket.receive({ pong: { clientTimeMs: 8000, serverTimeMs: 9000, runtimeSecondsTotal: 28799 } })
   assert.equal(timeSync.isInitialized(), true)
   assert.equal(timeSync.getLastRttMs(), 2000)
   assert.equal(timeSync.estimateServerNowMs(), 10000)
+  assert.equal(runtimeTimeSync.getRuntimeMs(), 28800000n, 'runtime clock uses half the matched Ping monotonic round trip')
   const snapshot = gameCalendarSync.getCalendar()
   assert.deepEqual([snapshot?.day, snapshot?.hour, snapshot?.minute, snapshot?.second], [1, 23, 59, 57])
   t.mock.timers.tick(60000)
+  monotonic += 60000
   assert.equal(timeSync.estimateServerNowMs(), 70000, 'wall synchronization continues using its existing local clock')
   assert.strictEqual(gameCalendarSync.getCalendar(), snapshot, 'calendar changes only when a valid runtime Pong arrives')
+  assert.equal(runtimeTimeSync.estimateRuntimeMs(), 28860000n, 'item progress estimates runtime independently of the calendar snapshot')
+  connection.sendPing()
   socket.receive({ pong: { clientTimeMs: 70000, serverTimeMs: 70000, runtimeSecondsTotal: 28800 } })
   assert.equal(gameCalendarSync.getCalendar()?.day, 2)
   assert.equal(gameCalendarSync.getDayPhase(), 0)
+})
+
+test('runtime delivery age survives forward/backward wall jumps followed by new Pongs', t => {
+  const epoch = 1000000000
+  let wall = epoch, monotonic = 0
+  t.mock.method(Date, 'now', () => wall)
+  t.mock.method(performance, 'now', () => monotonic)
+  const { connection, connect } = connectionFixture(t)
+  const socket = connect()
+  socket.receive({ serverConstants: serverProfile })
+  wall += 100
+  monotonic += 100
+  socket.receive({ pong: { clientTimeMs: epoch, serverTimeMs: epoch + 50, runtimeSecondsTotal: 100 } })
+  assert.equal(runtimeTimeSync.getRuntimeMs(), 100050n)
+
+  for (const jump of [3600000, -7200000]) {
+    wall += 4900 + jump
+    monotonic += 4900
+    connection.sendPing()
+    const echoedTime = wall
+    wall += 100
+    monotonic += 100
+    const serverTimeMs = epoch + monotonic - 50
+    socket.receive({ pong: { clientTimeMs: echoedTime, serverTimeMs, runtimeSecondsTotal: 100 + Math.floor(monotonic / 1000) } })
+    assert.equal(runtimeTimeSync.getRuntimeMs(), 100000n + BigInt(monotonic - 50), 'wall changes cannot permanently fast-forward item runtime')
+    assert.ok(Math.abs(timeSync.estimateServerNowMs() - serverTimeMs) > 1000000, 'regression exercises the divergent smoothed wall estimate')
+  }
+})
+
+test('healthy matched Pongs remove an asymmetric RTT runtime lead without rewinding the display', t => {
+  const epoch = 1000000000
+  let wall = epoch, monotonic = 0
+  t.mock.method(Date, 'now', () => wall)
+  t.mock.method(performance, 'now', () => monotonic)
+  const { connection, connect } = connectionFixture(t)
+  const socket = connect()
+  socket.receive({ serverConstants: serverProfile })
+  socket.receive(pong(socket, 100))
+  assert.equal(runtimeTimeSync.getRuntimeMs(), 100000n)
+
+  wall += 5000
+  monotonic += 5000
+  connection.sendPing()
+  wall += 4000
+  monotonic += 4000
+  socket.receive(pong(socket, 109))
+  assert.equal(timeSync.getLastRttMs(), 4000)
+  assert.equal(runtimeTimeSync.getRuntimeMs(), 111000n, 'a delayed outbound Ping can overestimate the fresh response age')
+
+  for (const elapsed of [10000, 10500, 11000, 11500, 12000, 15000, 20000]) {
+    wall = epoch + elapsed
+    monotonic = elapsed
+    const expected = BigInt(Math.max(112000, 100000 + elapsed))
+    assert.equal(runtimeTimeSync.estimateRuntimeMs(), expected, 'the prior display holds through recovery, then advances normally')
+    connection.sendPing()
+    socket.receive(pong(socket, 100 + Math.floor(elapsed / 1000)))
+    assert.equal(runtimeTimeSync.getRuntimeMs(), expected, 'each healthy Pong corrects the anchor without compounding the original lead')
+  }
+})
+
+test('only a fresh matching Ping response resamples runtime; superseded, mismatched and duplicate responses are ignored', t => {
+  let wall = 10000, monotonic = 0
+  t.mock.method(Date, 'now', () => wall)
+  t.mock.method(performance, 'now', () => monotonic)
+  const { connection, connect } = connectionFixture(t)
+  const socket = connect()
+  socket.receive({ serverConstants: serverProfile })
+  wall += 50
+  monotonic += 50
+  socket.receive({ pong: { clientTimeMs: 9999, serverTimeMs: wall, runtimeSecondsTotal: 999 } })
+  assert.equal(runtimeTimeSync.getRuntimeMs(), null, 'an unmatched Pong cannot invent delivery age')
+  connection.sendPing()
+  wall += 50
+  monotonic += 50
+  socket.receive({ pong: { clientTimeMs: 10000, serverTimeMs: wall, runtimeSecondsTotal: 999 } })
+  assert.equal(runtimeTimeSync.getRuntimeMs(), null, 'the older outstanding Ping has been superseded')
+  socket.receive({ pong: { clientTimeMs: 10050, serverTimeMs: wall, runtimeSecondsTotal: 100 } })
+  assert.equal(runtimeTimeSync.getRuntimeMs(), 100025n)
+  wall += 50
+  monotonic += 50
+  socket.receive({ pong: { clientTimeMs: 10050, serverTimeMs: wall, runtimeSecondsTotal: 999 } })
+  assert.equal(runtimeTimeSync.getRuntimeMs(), 100025n, 'a consumed echo cannot resample even with a different sample pair')
+  connection.sendPing()
+  wall += 100
+  monotonic += 100
+  socket.receive(pong(socket, 500))
+  assert.equal(runtimeTimeSync.getRuntimeMs(), 500050n, 'a new matched response still applies administrator advances')
 })
 
 test('missing, malformed and changed constants use connection errors', t => {
@@ -155,7 +259,7 @@ test('missing, malformed and changed constants use connection errors', t => {
   assert.equal(serverConstants.getSnapshot(), null)
   socket = connect()
   socket.receive({ serverConstants: serverProfile })
-  socket.receive(pong(1))
+  socket.receive(pong(socket, 1))
   const snapshot = serverConstants.getSnapshot()
   socket.receive({ serverConstants: { ...serverProfile } })
   assert.strictEqual(serverConstants.getSnapshot(), snapshot)
@@ -164,6 +268,7 @@ test('missing, malformed and changed constants use connection errors', t => {
   assert.equal(connection.getState(), 'error')
   assert.equal(serverConstants.getSnapshot(), null)
   assert.equal(gameCalendarSync.getCalendar(), null)
+  assert.equal(runtimeTimeSync.getRuntimeMs(), null)
 })
 
 test('reconnect accepts new constants and restored runtime; retired callbacks cannot install state', t => {
@@ -172,7 +277,7 @@ test('reconnect accepts new constants and restored runtime; retired callbacks ca
   const { connection, connect } = connectionFixture(t)
   const first = connect()
   first.receive({ serverConstants: serverProfile })
-  first.receive(pong(999999))
+  first.receive(pong(first, 999999))
   store.setConnectionState('connected')
   store.setPlayerEnterWorld(1, 'old world', 7)
   assert.equal(store.isInGame, true)
@@ -182,21 +287,25 @@ test('reconnect accepts new constants and restored runtime; retired callbacks ca
   assert.equal(hasWorldParams(), false)
   assert.equal(store.isInGame, false, 'connection reset invalidates old world without a state callback')
   assert.equal(gameCalendarSync.getCalendar(), null)
+  assert.equal(runtimeTimeSync.getRuntimeMs(), null)
   retiredMessage({ data: proto.ServerMessage.encode({ serverConstants: serverProfile }).finish() } as unknown as MessageEvent)
   retiredClose({ reason: 'late close' } as CloseEvent)
   assert.equal(serverConstants.getSnapshot(), null)
   assert.equal(connection.getState(), 'connected')
   const next = { ...serverProfile, coordPerTile: 24, chunkSize: 64, tickRate: 30, realSecondsPerGameDay: 100 }
   second.receive({ serverConstants: next })
-  second.receive(pong(0))
+  second.receive(pong(second, 0))
   assert.equal(store.isInGame, false, 'fresh constants cannot reactivate the old world')
   assert.equal(gameCalendarSync.getCalendar()?.year, 1n)
+  const nextRuntimeSample = runtimeTimeSync.getRuntimeMs()
+  assert.ok(nextRuntimeSample !== null && nextRuntimeSample < 1000n)
   assert.equal(getCoordPerTile(), 24)
   assert.equal(getChunkSize(), 64)
   assert.deepEqual(coordGame2Screen(24, 0), { x: 32, y: 16 })
   assert.equal(moveController.getTickRate(), 30)
-  retiredMessage({ data: proto.ServerMessage.encode(proto.ServerMessage.fromObject(pong(999999))).finish() } as unknown as MessageEvent)
+  retiredMessage({ data: proto.ServerMessage.encode(proto.ServerMessage.fromObject(pong(first, 999999))).finish() } as unknown as MessageEvent)
   assert.equal(gameCalendarSync.getCalendar()?.year, 1n)
+  assert.equal(runtimeTimeSync.getRuntimeMs(), nextRuntimeSample, 'retired socket callbacks cannot advance the replacement runtime clock')
   connection.disconnect()
   second.receive({ serverConstants: next })
   assert.equal(hasWorldParams(), false)
@@ -207,7 +316,7 @@ test('auth failure, remote close, socket error and direct disconnect clear conne
   for (const end of ['close', 'error', 'disconnect', 'auth-failure']) {
     const socket = connect()
     socket.receive({ serverConstants: serverProfile })
-    socket.receive(pong(100))
+    socket.receive(pong(socket, 100))
     assert.equal(hasWorldParams(), true)
     if (end === 'close') socket.onclose?.({ reason: 'remote' } as CloseEvent)
     if (end === 'error') socket.onerror?.()
@@ -222,6 +331,7 @@ test('auth failure, remote close, socket error and direct disconnect clear conne
     }
     assert.equal(hasWorldParams(), false)
     assert.equal(gameCalendarSync.getCalendar(), null)
+    assert.equal(runtimeTimeSync.getRuntimeMs(), null)
     assert.equal(timeSync.isInitialized(), false)
   }
 })

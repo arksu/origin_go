@@ -4,6 +4,7 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/behaviors/contracts"
 	"origin/internal/itemdefs"
 	"origin/internal/network"
 	netproto "origin/internal/network/proto"
@@ -14,12 +15,15 @@ import (
 )
 
 type SnapshotSender struct {
-	logger *zap.Logger
+	logger           *zap.Logger
+	behaviorRegistry contracts.BehaviorRegistry
 }
 
-func NewSnapshotSender(logger *zap.Logger) *SnapshotSender {
+// The registry is immutable and shared by all shards using this sender.
+func NewSnapshotSender(logger *zap.Logger, registry contracts.BehaviorRegistry) *SnapshotSender {
 	return &SnapshotSender{
-		logger: logger,
+		logger:           logger,
+		behaviorRegistry: registry,
 	}
 }
 
@@ -131,7 +135,7 @@ func (ss *SnapshotSender) buildGridState(
 	items := make([]*netproto.GridItem, 0, len(container.Items))
 
 	for _, invItem := range container.Items {
-		itemInstance := ss.buildItemInstance(world, invItem)
+		itemInstance := ss.buildItemInstance(world, container, invItem)
 		gridItem := &netproto.GridItem{
 			X:    uint32(invItem.X),
 			Y:    uint32(invItem.Y),
@@ -154,7 +158,7 @@ func (ss *SnapshotSender) buildEquipmentState(
 	items := make([]*netproto.EquipmentItem, 0, len(container.Items))
 
 	for _, invItem := range container.Items {
-		itemInstance := ss.buildItemInstance(world, invItem)
+		itemInstance := ss.buildItemInstance(world, container, invItem)
 		equipItem := &netproto.EquipmentItem{
 			Slot: invItem.EquipSlot,
 			Item: itemInstance,
@@ -174,7 +178,7 @@ func (ss *SnapshotSender) buildHandState(
 	handState := &netproto.InventoryHandState{}
 
 	if len(container.Items) > 0 {
-		itemInstance := ss.buildItemInstance(world, container.Items[0])
+		itemInstance := ss.buildItemInstance(world, container, container.Items[0])
 		handState.Item = itemInstance
 		handState.HandPos = &netproto.HandPos{
 			MouseOffsetX: int32(container.HandMouseOffsetX),
@@ -187,6 +191,7 @@ func (ss *SnapshotSender) buildHandState(
 
 func (ss *SnapshotSender) buildItemInstance(
 	world *ecs.World,
+	container components.InventoryContainer,
 	invItem components.InvItem,
 ) *netproto.ItemInstance {
 	itemInstance := &netproto.ItemInstance{
@@ -197,6 +202,7 @@ func (ss *SnapshotSender) buildItemInstance(
 		Quantity: invItem.Quantity,
 		W:        uint32(invItem.W),
 		H:        uint32(invItem.H),
+		Progress: ResolveItemProgress(world, ss.behaviorRegistry, container, invItem),
 	}
 
 	if hint := invItem.Skull.HintExt(); hint != "" {

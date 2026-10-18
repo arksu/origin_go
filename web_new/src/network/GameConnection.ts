@@ -4,6 +4,7 @@ import type { ConnectionState, ConnectionError } from './types'
 import { timeSync } from './TimeSync'
 import { serverConstants } from './ServerConstants'
 import { gameCalendarSync } from './GameCalendarSync'
+import { runtimeTimeSync } from './RuntimeTimeSync'
 
 type MessageHandler = (message: proto.ServerMessage) => void
 type StateChangeHandler = (state: ConnectionState, error?: ConnectionError) => void
@@ -12,6 +13,7 @@ export class GameConnection {
   private ws: WebSocket | null = null
   private state: ConnectionState = 'disconnected'
   private pingInterval: ReturnType<typeof setInterval> | null = null
+  private pendingPing: { clientTimeMs: number; monotonicMs: number } | null = null
   private messageHandler: MessageHandler | null = null
   private stateChangeHandler: StateChangeHandler | null = null
   private authToken: string = ''
@@ -82,9 +84,13 @@ export class GameConnection {
   }
 
   sendPing(): void {
+    const clientTimeMs = Date.now()
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.pendingPing = { clientTimeMs, monotonicMs: performance.now() }
+    }
     this.send({
       ping: proto.C2S_Ping.create({
-        clientTimeMs: Date.now(),
+        clientTimeMs,
       }),
     })
   }
@@ -164,6 +170,12 @@ export class GameConnection {
       timeSync.onPong(clientSendMs, serverTimeMs)
     }
     gameCalendarSync.acceptSample(pong.runtimeSecondsTotal, pong.serverTimeMs)
+    if (this.pendingPing && clientSendMs === this.pendingPing.clientTimeMs) {
+      // Match only the latest outstanding Ping. Monotonic RTT cannot inherit wall-clock jumps.
+      const roundTripMs = performance.now() - this.pendingPing.monotonicMs
+      this.pendingPing = null
+      runtimeTimeSync.acceptSample(pong.runtimeSecondsTotal, pong.serverTimeMs, roundTripMs / 2)
+    }
 
     if (config.DEBUG) {
       const metrics = timeSync.getDebugMetrics()
@@ -200,9 +212,11 @@ export class GameConnection {
   }
 
   private resetConnectionTime(): void {
+    this.pendingPing = null
     timeSync.reset()
     serverConstants.reset()
     gameCalendarSync.reset()
+    runtimeTimeSync.reset()
   }
 
   private startPing(): void {

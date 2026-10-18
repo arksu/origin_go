@@ -90,8 +90,51 @@ Completion increments the inventory version, marks the object for persistence,
 and sends inventory updates to all players with that container open. Completed
 seed items persist through the ordinary inventory save path; restoring a
 completed inventory does not select the result again. Existing object/inventory
-persistence is used; there are no new protocol fields, SQL migrations, progress
-windows or client timer state.
+persistence is used; progress presentation does not add persistence fields,
+SQL migrations or a separate station window.
+
+## Item progress presentation
+
+The ordinary inventory item component displays progress from the optional
+`ItemInstance.progress` message. This contract is shared by production stations;
+the client does not identify drying inputs or infer recipe durations. Each item
+has at most one progress value, containing a positive `duration_seconds` and one
+of `completion_runtime_seconds` for a running process or
+`paused_remaining_seconds` for a paused process. An absent or invalid progress
+value leaves the item's ordinary appearance and tooltip unchanged. Drying only
+emits running progress; pause support is available for future stations.
+
+Drying projects its existing authoritative deadline and configured recipe
+duration without mutating or reconciling behavior state during serialization.
+Projection validates the live owner, root inventory, input identity, type, cell
+and eligibility. The same progress is included in operation results, inventory
+snapshots, container opening and completion broadcasts. Finished outputs and
+items removed from the frame have no drying progress.
+
+A dark sector clears clockwise from 12 o'clock, like action cooldowns, while the
+quality label remains visible. The tooltip adds `Time remaining: 1h 23m 45s` and
+updates without pointer movement. A paused process freezes its sector and adds
+`Paused` with its frozen remaining time. Remaining seconds round upward; the
+client can show `0s` while waiting for the server to replace a completed input.
+Reaching zero locally never converts an item.
+
+One client presentation clock interpolates server runtime from existing
+authenticated Pong samples. Delivery age is estimated from half the matching
+Ping's round-trip time, measured with a monotonic clock; subsequent advancement
+also uses monotonic elapsed time, so changing the client wall clock cannot
+accelerate progress. Fresh samples can correct an overestimated runtime after
+asymmetric network delay. Presentation briefly holds its last estimate until
+the corrected clock catches up, then resumes without moving progress backward
+or retaining the old lead. All visible running items share one animation loop. Active
+progress waits for the first valid runtime sample; paused progress can display
+immediately. Whole-second runtime samples limit synchronization precision to
+about one second. The next Pong corrects runtime jumps such as `/addtime`.
+Connection reset discards the old clock; layer changes retain synchronization.
+The calendar and action cooldown clocks keep their existing behavior.
+
+No progress-specific polling, periodic inventory broadcasts or frame scans are
+needed. The server remains authoritative, using the existing mutation and
+completion updates, while the client animates the received deadlines.
 
 ## Appearance
 
@@ -131,5 +174,7 @@ hide that finishes loading later.
 
 Run `make test`; in `web_new`, run `npm run type-check`, `npm run lint -- --no-fix`,
 `npm run test:inventory-item`, `npm run test:inventory-transfer`,
-`npm run test:inventory-drag`, `npm run test:character-visual`,
+`npm run test:inventory-drag`, `npm run test:item-progress`,
+`npm run test:game-calendar`, `npm run test:server-constants`,
+`npm run test:character-visual`,
 `npm run test:asset-pipeline`, and `npm run validate-objects`.

@@ -8,6 +8,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
 	"origin/internal/eventbus"
+	"origin/internal/game/behaviors/contracts"
 	"origin/internal/game/inventory"
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
@@ -25,10 +26,16 @@ type containerEventSender interface {
 // OpenContainerService is a non-ECS service that listens link sync events
 // and manages object container open/close lifecycle in OpenContainerState.
 type OpenContainerService struct {
-	world    *ecs.World
-	eventBus *eventbus.EventBus
-	sender   containerEventSender
-	logger   *zap.Logger
+	world            *ecs.World
+	eventBus         *eventbus.EventBus
+	sender           containerEventSender
+	logger           *zap.Logger
+	behaviorRegistry contracts.BehaviorRegistry
+}
+
+// SetBehaviorRegistry configures read-only item projections before shard updates.
+func (s *OpenContainerService) SetBehaviorRegistry(registry contracts.BehaviorRegistry) {
+	s.behaviorRegistry = registry
 }
 
 func NewOpenContainerService(
@@ -421,7 +428,7 @@ func (s *OpenContainerService) openAnyRefForPlayer(
 	}
 
 	if s.sender != nil {
-		s.sender.SendContainerOpened(playerID, buildInventoryStateFromContainer(w, container))
+		s.sender.SendContainerOpened(playerID, s.buildInventoryStateFromContainer(w, container))
 	}
 	return nil
 }
@@ -504,7 +511,7 @@ func inventoryKeyToProto(key ecs.InventoryRefKey) *netproto.InventoryRef {
 	}
 }
 
-func buildInventoryStateFromContainer(w *ecs.World, container components.InventoryContainer) *netproto.InventoryState {
+func (s *OpenContainerService) buildInventoryStateFromContainer(w *ecs.World, container components.InventoryContainer) *netproto.InventoryState {
 	ref := &netproto.InventoryRef{
 		Kind:         netproto.InventoryKind(container.Kind),
 		OwnerId:      uint64(container.OwnerID),
@@ -530,6 +537,7 @@ func buildInventoryStateFromContainer(w *ecs.World, container components.Invento
 				Quantity: item.Quantity,
 				W:        uint32(item.W),
 				H:        uint32(item.H),
+				Progress: inventory.ResolveItemProgress(w, s.behaviorRegistry, container, item),
 			}
 			// Set name from item definition
 			if def, ok := itemdefs.Global().GetByID(int(item.TypeID)); ok {
@@ -567,6 +575,7 @@ func buildInventoryStateFromContainer(w *ecs.World, container components.Invento
 				Quantity: item.Quantity,
 				W:        uint32(item.W),
 				H:        uint32(item.H),
+				Progress: inventory.ResolveItemProgress(w, s.behaviorRegistry, container, item),
 			}
 			// Set name from item definition
 			if def, ok := itemdefs.Global().GetByID(int(item.TypeID)); ok {
@@ -591,6 +600,7 @@ func buildInventoryStateFromContainer(w *ecs.World, container components.Invento
 					Quantity: item.Quantity,
 					W:        uint32(item.W),
 					H:        uint32(item.H),
+					Progress: inventory.ResolveItemProgress(w, s.behaviorRegistry, container, item),
 				},
 			})
 			// Set name from item definition

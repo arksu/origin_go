@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 import { compileScript, parse } from '@vue/compiler-sfc'
-import { createRenderer, markRaw } from 'vue'
+import { createRenderer, h, markRaw, nextTick, ref } from 'vue'
 
 const clientRoot = fileURLToPath(new URL('..', import.meta.url))
 const temporaryRoot = join(clientRoot, 'node_modules', '.tmp')
@@ -28,7 +28,10 @@ const dragFixtureSource = `
   })
 `
 await build({
-  stdin: { contents: script.content, sourcefile: componentPath, resolveDir: dirname(componentPath), loader: 'ts' },
+  stdin: {
+    contents: `${script.content}\nexport { runtimeTimeSync } from '@/network/RuntimeTimeSync';`,
+    sourcefile: componentPath, resolveDir: dirname(componentPath), loader: 'ts',
+  },
   outfile: compiledPath, bundle: true, platform: 'node', format: 'esm', external: ['vue'],
   alias: { '@': join(clientRoot, 'src') },
   plugins: [{
@@ -39,7 +42,7 @@ await build({
     },
   }],
 })
-const { default: InventoryItem } = await import(pathToFileURL(compiledPath).href)
+const { default: InventoryItem, runtimeTimeSync } = await import(pathToFileURL(compiledPath).href)
 
 function createNode(type, text = '') {
   return markRaw({
@@ -52,10 +55,192 @@ function createNode(type, text = '') {
 const renderer = createRenderer({
   createElement: createNode, createText: text => createNode('#text', text), createComment: text => createNode('#comment', text),
   setText: (node, text) => { node.text = text }, setElementText: (node, text) => { node.text = text },
-  parentNode: node => node.parent, nextSibling: () => null,
+  parentNode: node => node.parent, nextSibling: node => node.parent?.children[node.parent.children.indexOf(node) + 1] ?? null,
   patchProp: (node, key, previous, value) => { node.props[key] = value },
-  insert: (node, parent) => parent.appendChild(node),
+  insert: (node, parent, anchor) => {
+    node.parent?.removeChild(node)
+    const index = anchor ? parent.children.indexOf(anchor) : -1
+    node.parent = parent
+    if (index < 0) parent.children.push(node)
+    else parent.children.splice(index, 0, node)
+  },
   remove: node => node.parent?.removeChild(node),
+})
+
+function progressFixture(t, instance) {
+  const originalDocument = globalThis.document
+  const originalRaf = globalThis.requestAnimationFrame
+  const originalCancelRaf = globalThis.cancelAnimationFrame
+  const body = createNode('body')
+  globalThis.document = { createElement: createNode, body }
+  let monotonic = 0, wall = 10000, frameId = 0
+  const frames = new Map()
+  globalThis.requestAnimationFrame = callback => { frames.set(++frameId, callback); return frameId }
+  globalThis.cancelAnimationFrame = id => { frames.delete(id) }
+  t.mock.method(performance, 'now', () => monotonic)
+  t.mock.method(Date, 'now', () => wall)
+  runtimeTimeSync.reset()
+  const item = ref({ x: 0, y: 0, instance: { itemId: 19, name: 'Item', quality: 12, ...instance } })
+  const copies = ref(1)
+  const host = createNode('root')
+  const clicks = []
+  const app = renderer.createApp({
+    setup: () => () => h('items', Array.from({ length: copies.value }, (_, index) => h(InventoryItem, {
+      key: index, item: item.value, inventoryRef: { kind: 0, ownerId: 7 + index, inventoryKey: 0 },
+      onItemClick: (...args) => clicks.push(args),
+    }))),
+  })
+  app.mount(host)
+  t.after(() => {
+    app.unmount()
+    runtimeTimeSync.reset()
+    for (const [key, original] of [['document', originalDocument], ['requestAnimationFrame', originalRaf], ['cancelAnimationFrame', originalCancelRaf]]) {
+      if (original === undefined) delete globalThis[key]
+      else globalThis[key] = original
+    }
+  })
+  return {
+    item, copies, body, host, frames, clicks,
+    container: () => host.children[0].children.find(child => child.type === 'div'),
+    progress: () => host.children[0].children.find(child => child.type === 'div')?.children.find(child => child.props.class === 'item-progress'),
+    text: () => body.children[0]?.children[0]?.textContent,
+    sample(runtime) { runtimeTimeSync.acceptSample(runtime, wall, 0) },
+    async advance(ms, render = true) {
+      monotonic += ms
+      wall += ms
+      if (render) {
+        const callbacks = [...frames.values()]
+        frames.clear()
+        callbacks.forEach(callback => callback(monotonic))
+      }
+      await nextTick()
+    },
+  }
+}
+
+test('active item waits for runtime then updates its existing tooltip and clearing overlay without pointer movement', async t => {
+  const f = progressFixture(t, { progress: { durationSeconds: 10, completionRuntimeSeconds: 110 } })
+  await nextTick()
+  f.container().props.onMouseenter({ clientX: 20, clientY: 30 })
+  assert.equal(f.text(), 'Item, quality: 12')
+  assert.equal(f.progress(), undefined)
+  assert.equal(f.frames.size, 0)
+  f.sample(100)
+  await nextTick()
+  assert.equal(f.text(), 'Item, quality: 12\nTime remaining: 10s')
+  assert.match(f.progress().props.style.background, /from 0deg, transparent 0turn 0turn/)
+  const content = f.body.children[0].children[0]
+  await f.advance(1501)
+  assert.equal(f.text(), 'Item, quality: 12\nTime remaining: 9s')
+  assert.strictEqual(f.body.children[0].children[0], content, 'live update reuses the literal text node')
+  assert.match(f.progress().props.style.background, /0\.1501turn/)
+  assert.equal(f.frames.size, 1)
+  assert.ok(f.container().children.indexOf(f.progress()) < f.container().children.findIndex(node => node.props.class === 'item-quality'))
+  assert.equal(f.progress().props['aria-hidden'], 'true')
+  const style = descriptor.styles.map(style => style.content).join('\n')
+  assert.match(style, /\.item-progress\s*\{[^}]*pointer-events:\s*none/s)
+  assert.equal(f.body.children[0].style.left, '30px')
+  assert.equal(f.body.children[0].style.top, '40px')
+  await f.advance(20000)
+  assert.equal(f.text(), 'Item, quality: 12\nTime remaining: 0s')
+  assert.match(f.progress().props.style.background, /1turn/)
+  assert.equal(f.frames.size, 0, 'expired displays stop animating and await an authoritative item update')
+  assert.equal(f.item.value.instance.itemId, 19)
+})
+
+test('paused metadata renders immediately and freezes, resume restarts one shared clock, replacement/removal updates literal tooltip', async t => {
+  const f = progressFixture(t, { progress: { durationSeconds: 6000, pausedRemainingSeconds: 5025 } })
+  await nextTick()
+  f.container().props.onMouseenter({ clientX: 0, clientY: 0 })
+  assert.equal(f.text(), 'Item, quality: 12\nTime remaining: 1h 23m 45s\nPaused')
+  const frozen = f.progress().props.style.background
+  f.sample(100)
+  await f.advance(10000)
+  assert.equal(f.text(), 'Item, quality: 12\nTime remaining: 1h 23m 45s\nPaused')
+  assert.equal(f.progress().props.style.background, frozen)
+  assert.equal(f.frames.size, 0)
+  f.item.value.instance.progress = { durationSeconds: 6000, completionRuntimeSeconds: 5135 }
+  f.copies.value = 2
+  await nextTick()
+  assert.equal(f.text(), 'Item, quality: 12\nTime remaining: 1h 23m 45s')
+  assert.equal(f.frames.size, 1, 'multiple visible item copies share one RAF')
+  await f.advance(1000)
+  assert.equal(f.text(), 'Item, quality: 12\nTime remaining: 1h 23m 44s')
+  f.item.value.instance = { itemId: 20, name: '<script>literal</script>', quality: 7, hintExt: '<b>text</b>', progress: { durationSeconds: 10, pausedRemainingSeconds: 0 } }
+  await nextTick()
+  assert.equal(f.text(), '<script>literal</script>, quality: 7\n<b>text</b>\nTime remaining: 0s\nPaused')
+  assert.equal(f.frames.size, 0)
+  delete f.item.value.instance.progress
+  await nextTick()
+  assert.equal(f.text(), '<script>literal</script>, quality: 7\n<b>text</b>')
+  assert.equal(f.progress(), undefined)
+  f.copies.value = 0
+  await nextTick()
+  assert.equal(f.body.children.length, 0, 'item removal cleans its tooltip')
+  assert.equal(f.frames.size, 0)
+})
+
+test('closing the last active item cancels RAF, reopening after background expiry leaves no subscription', async t => {
+  const f = progressFixture(t, { progress: { durationSeconds: 10, completionRuntimeSeconds: 110 } })
+  f.sample(100)
+  f.copies.value = 2
+  await nextTick()
+  assert.equal(f.frames.size, 1)
+  f.copies.value = 1
+  await nextTick()
+  assert.equal(f.frames.size, 1)
+  f.copies.value = 0
+  await nextTick()
+  assert.equal(f.frames.size, 0)
+  await f.advance(30000, false)
+  f.copies.value = 1
+  await nextTick()
+  f.container().props.onMouseenter({ clientX: 0, clientY: 0 })
+  assert.equal(f.text(), 'Item, quality: 12\nTime remaining: 0s')
+  assert.equal(f.frames.size, 0, 'subscribe refresh cannot leak a reentrant expired consumer')
+})
+
+test('connection reset hides active progress and stops RAF; lower runtime resumes a still-mounted item', async t => {
+  const f = progressFixture(t, { progress: { durationSeconds: 10, completionRuntimeSeconds: 110 } })
+  f.sample(100)
+  await nextTick()
+  f.container().props.onMouseenter({ clientX: 0, clientY: 0 })
+  runtimeTimeSync.reset()
+  await nextTick()
+  assert.equal(f.frames.size, 0)
+  assert.equal(f.text(), 'Item, quality: 12')
+  assert.equal(f.progress(), undefined)
+  f.sample(0)
+  await nextTick()
+  assert.equal(f.text(), 'Item, quality: 12\nTime remaining: 10s')
+  assert.equal(f.frames.size, 1)
+  f.item.value.instance.progress = { durationSeconds: 10, pausedRemainingSeconds: 11 }
+  await nextTick()
+  assert.equal(f.frames.size, 0)
+  assert.equal(f.progress(), undefined)
+  assert.equal(f.text(), 'Item, quality: 12')
+})
+
+test('an item with a progress overlay preserves click offsets, Shift and pointer-drag routing', async t => {
+  const originalFixture = globalThis.inventoryDragFixture
+  const drag = { calls: [], consume: false }
+  globalThis.inventoryDragFixture = drag
+  t.after(() => {
+    if (originalFixture === undefined) delete globalThis.inventoryDragFixture
+    else globalThis.inventoryDragFixture = originalFixture
+  })
+  const f = progressFixture(t, { progress: { durationSeconds: 10, pausedRemainingSeconds: 5 } })
+  await nextTick()
+  const container = f.container()
+  const pointer = { pointerId: 1 }
+  container.props.onPointerdown(pointer)
+  assert.deepEqual(drag.calls[0], ['grid', pointer, { kind: 0, ownerId: 7, inventoryKey: 0 }, f.item.value])
+  container.getBoundingClientRect = () => ({ left: 10, top: 20, width: 64, height: 32 })
+  container.props.onClick({ currentTarget: container, target: f.progress(), clientX: 25.8, clientY: 27.2, shiftKey: true, preventDefault() {} })
+  assert.deepEqual(f.clicks, [[f.item.value, 15, 7, true]])
+  drag.consume = true
+  container.props.onClick({ preventDefault() {} })
+  assert.equal(f.clicks.length, 1, 'finishing a drag still consumes its click')
 })
 
 for (const [label, ownerId] of [['main', 7], ['nested', 700]]) {

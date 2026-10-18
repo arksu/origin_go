@@ -32,6 +32,14 @@ server changes for CPU cost, allocations, and memory.
   `Shard.Update` holds `s.mu` across chunk activation, sequential systems, and sound flush.
   Mutate through the owning shard's execution path or existing lifecycle methods holding its lock.
   Background reads: `WithWorldRead`; copy before unlocking, retaining no mutable references.
+- **ECS component budget:** hard limit of **64 distinct component types process-wide**
+  (IDs `0-63`, including built-ins), shared by all Worlds/shards. `ComponentMask` is `uint64`;
+  `MaxComponentID = 63`, and registration/mask operations panic on larger IDs
+  (`internal/ecs/component.go`). Before adding a component, justify why existing
+  components or resources cannot suffice; check actual registrations and the reserved/retired
+  IDs documented in `internal/ecs/components/AGENTS.md`. Never reuse assigned IDs or bypass the limit
+  by only raising `MaxComponentID`; masks, archetypes, queries, and observer storage
+  depend on the 64-slot layout.
 - **Ingress:** network goroutines enqueue `PlayerCommandInbox`; internal snapshots
   use `ServerJobInbox`. `NetworkCommandSystem` (priority `0`) drains player commands
   before server jobs under shard lock. Apply async chunk-load results in `Shard.Update`

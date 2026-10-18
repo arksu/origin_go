@@ -234,12 +234,14 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	}
 	s.chunkManager.SetRestoredObjectReconciler(&shardObjectRestoreReconciler{shard: s, burner: burnerExhaustion})
 	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, worldObjectPersistence, s.chunkManager, visionSystem)
+	inventoryExecutor.SetBehaviorRegistry(behaviorRegistry)
 	s.inventoryExecutor = inventoryExecutor
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
 	networkCmdSystem.SetDirectionalSessionValidator(s.validDirectionalSession)
 	networkCmdSystem.SetStandUpHandler(s.queueStandUp)
 	openContainerService := NewOpenContainerService(s.world, s.eventBus, s, logger)
+	openContainerService.SetBehaviorRegistry(behaviorRegistry)
 	behaviorExecutionDeps := &contracts.ExecutionDeps{
 		EventBus: s.eventBus, Logger: logger, ExhaustBurner: burnerExhaustion.exhaust,
 		IDAllocator: entityIDManager,

@@ -11,6 +11,7 @@ import (
 	"origin/internal/ecs/components"
 	"origin/internal/game/behaviors/contracts"
 	"origin/internal/itemdefs"
+	netproto "origin/internal/network/proto"
 	"origin/internal/objectdefs"
 	"origin/internal/types"
 )
@@ -18,6 +19,44 @@ import (
 type dryingBehavior struct{}
 
 func (dryingBehavior) Key() string { return "drying" }
+
+func (dryingBehavior) InventoryItemProgress(ctx *contracts.InventoryItemProgressContext) *netproto.ItemProgress {
+	if ctx == nil || ctx.Container.Kind != constt.InventoryGrid || ctx.Container.Key != 0 || ctx.Container.OwnerID != ctx.EntityID {
+		return nil
+	}
+	def, valid := dryingDefinition(ctx.World, ctx.Handle, ctx.EntityID, ctx.EntityType)
+	if !valid {
+		return nil
+	}
+	_, inventory, found := dryingRootInventory(ctx.World, ctx.EntityID)
+	if !found || len(inventory.Items) > components.MaxDryingItems {
+		return nil
+	}
+	internal, found := ecs.GetComponent[components.ObjectInternalState](ctx.World, ctx.Handle)
+	if !found {
+		return nil
+	}
+	state, found := components.GetBehaviorState[components.DryingBehaviorState](internal, "drying")
+	if !found || state == nil || len(state.Entries) > components.MaxDryingItems {
+		return nil
+	}
+	process := dryingProcess(def.DryingConfig, ctx.Item.TypeID)
+	if !dryingInputEligible(ctx.Item, process) || process.DurationSeconds <= 0 {
+		return nil
+	}
+	for _, entry := range state.Entries {
+		if entry.InputItemID != ctx.Item.ItemID || entry.InputTypeID != ctx.Item.TypeID || entry.InputX != ctx.Item.X || entry.InputY != ctx.Item.Y || entry.CompletionRuntimeSeconds <= 0 {
+			continue
+		}
+		if dryingInputIndex(inventory.Items, entry, process) >= 0 {
+			return &netproto.ItemProgress{
+				DurationSeconds: process.DurationSeconds,
+				Timing:          &netproto.ItemProgress_CompletionRuntimeSeconds{CompletionRuntimeSeconds: entry.CompletionRuntimeSeconds},
+			}
+		}
+	}
+	return nil
+}
 
 func (dryingBehavior) ApplyRuntime(ctx *contracts.BehaviorRuntimeContext) contracts.BehaviorRuntimeResult {
 	if ctx == nil {

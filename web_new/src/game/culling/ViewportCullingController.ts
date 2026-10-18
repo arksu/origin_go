@@ -48,8 +48,8 @@ export interface ObjectCullData {
 
 export class ViewportCullingController {
   private marginTiles: number = 4
-  private enterMarginTiles: number = 4
-  private exitMarginTiles: number = 2
+  private enterMarginTiles: number = 2
+  private exitMarginTiles: number = 4
   private useHysteresis: boolean = true
 
   private subchunks: Map<string, SubchunkCullData> = new Map()
@@ -72,8 +72,8 @@ export class ViewportCullingController {
 
   setMarginTiles(tiles: number): void {
     this.marginTiles = tiles
-    this.enterMarginTiles = tiles
-    this.exitMarginTiles = Math.max(0, tiles - 2)
+    this.enterMarginTiles = Math.max(0, tiles - 2)
+    this.exitMarginTiles = tiles
   }
 
   setHysteresis(enabled: boolean, enterTiles?: number, exitTiles?: number): void {

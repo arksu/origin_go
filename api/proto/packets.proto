@@ -145,6 +145,16 @@ message ItemInstance {
   // Если предмет является контейнером (seed_bag, backpack, etc.),
   // nested_ref указывает на вложенный инвентарь (состояние приходит отдельно по запросу)
   optional InventoryRef nested_ref = 12;
+  optional ItemProgress progress = 13;
+}
+
+// One server-authoritative process for this item. Runtime seconds pause offline.
+message ItemProgress {
+  int64 duration_seconds = 1;
+  oneof timing {
+    int64 completion_runtime_seconds = 2;
+    int64 paused_remaining_seconds = 3;
+  }
 }
 
 message GridItem {

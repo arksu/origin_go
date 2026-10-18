@@ -5,6 +5,7 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/ecs/systems"
+	"origin/internal/game/behaviors/contracts"
 	"origin/internal/itemdefs"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
@@ -29,7 +30,13 @@ type InventoryExecutor struct {
 	spatialRegistrar DroppedItemSpatialRegistrar
 	visionForcer     VisionUpdateForcer
 	rootMutationHook func(*ecs.World, types.EntityID)
+	behaviorRegistry contracts.BehaviorRegistry
 	logger           *zap.Logger
+}
+
+// SetBehaviorRegistry configures read-only item projections before shard updates.
+func (e *InventoryExecutor) SetBehaviorRegistry(registry contracts.BehaviorRegistry) {
+	e.behaviorRegistry = registry
 }
 
 // SetRootMutationHook installs the synchronous notification for committed
@@ -505,6 +512,7 @@ func (e *InventoryExecutor) convertContainerToState(w *ecs.World, info *Containe
 			Y:         item.Y,
 			EquipSlot: item.EquipSlot,
 			HintExt:   item.Skull.HintExt(),
+			Progress:  ResolveItemProgress(w, e.behaviorRegistry, *info.Container, item),
 		}
 
 		// Check if this item has a nested container via index (O(1))

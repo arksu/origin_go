@@ -136,7 +136,7 @@ func TestSkullHintExtMatchesBothSnapshotPathsAndProtoRoundtrip(t *testing.T) {
 		executor := &InventoryExecutor{}
 		state := executor.convertContainerToState(w, &ContainerInfo{Container: &container})
 		fromOperation := systems.BuildItemInstanceProto(state.Items[0])
-		fromLogin := NewSnapshotSender(zap.NewNop()).buildItemInstance(w, item)
+		fromLogin := NewSnapshotSender(zap.NewNop(), nil).buildItemInstance(w, components.InventoryContainer{}, item)
 		require.True(t, proto.Equal(fromLogin, fromOperation))
 		require.Equal(t, metadata.HintExt(), fromOperation.GetHintExt())
 		if metadata == nil {

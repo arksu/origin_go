@@ -149,7 +149,7 @@ func main() {
 	builddefs.SetGlobal(buildRegistry)
 
 	inventoryLoader := inventory.NewInventoryLoader(logger)
-	inventorySnapshotSender := inventory.NewSnapshotSender(logger)
+	inventorySnapshotSender := inventory.NewSnapshotSender(logger, behaviorRegistry)
 
 	objectFactory := world.NewObjectFactory(inventory.NewDroppedInventoryLoaderDB(db, inventoryLoader))
 
