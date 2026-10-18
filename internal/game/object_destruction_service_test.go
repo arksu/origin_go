@@ -27,6 +27,7 @@ type destructionChunksFixture struct {
 	inserted  []destructionDroppedRecord
 	removed   []types.EntityID
 	insertErr error
+	pinErr    error
 }
 
 func (c *destructionChunksFixture) SubmitPersistenceJob(job gameworld.PersistenceJob) bool {
@@ -37,6 +38,9 @@ func (c *destructionChunksFixture) SubmitPersistenceJob(job gameworld.Persistenc
 	return true
 }
 func (c *destructionChunksFixture) PinPersistence(coord types.ChunkCoord) error {
+	if c.pinErr != nil {
+		return c.pinErr
+	}
 	c.pins[coord]++
 	return nil
 }

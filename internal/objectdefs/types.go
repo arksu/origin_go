@@ -18,15 +18,16 @@ type ObjectDef struct {
 	Behaviors                 map[string]json.RawMessage `json:"behaviors,omitempty"`
 
 	// resolved at load time
-	IsStatic                       bool                  `json:"-"`
-	ContextMenuEvenForOneItemValue bool                  `json:"-"`
-	BehaviorOrder                  []string              `json:"-"`
-	BehaviorPriorities             map[string]int        `json:"-"`
-	TreeConfig                     *TreeBehaviorConfig   `json:"-"`
-	TakeConfig                     *TakeBehaviorConfig   `json:"-"`
-	BurnerConfig                   *BurnerBehaviorConfig `json:"-"`
-	DryingConfig                   *DryingBehaviorConfig `json:"-"`
-	LiftConfig                     *LiftBehaviorConfig   `json:"-"`
+	IsStatic                       bool                    `json:"-"`
+	ContextMenuEvenForOneItemValue bool                    `json:"-"`
+	BehaviorOrder                  []string                `json:"-"`
+	BehaviorPriorities             map[string]int          `json:"-"`
+	TreeConfig                     *TreeBehaviorConfig     `json:"-"`
+	TakeConfig                     *TakeBehaviorConfig     `json:"-"`
+	BurnerConfig                   *BurnerBehaviorConfig   `json:"-"`
+	DryingConfig                   *DryingBehaviorConfig   `json:"-"`
+	LiftConfig                     *LiftBehaviorConfig     `json:"-"`
+	WildWeedConfig                 *WildWeedBehaviorConfig `json:"-"`
 }
 
 // Components describes ECS components to attach when loading the object.

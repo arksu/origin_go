@@ -81,6 +81,7 @@ type ObjectDestructionDependencies struct {
 	WithWorldRead          func(func(*ecs.World))
 	Quarantine             func(types.Handle)
 	TransformCommitted     func(types.Handle, *objectdefs.ObjectDef) bool
+	SpotStateCommitted     func(gameworld.SpotStateCommit) error
 	SkullGranted           func(types.EntityID, types.Handle, *inventory.GiveItemResult)
 	SkullRejected          func(types.EntityID)
 	Region                 int
@@ -152,6 +153,9 @@ type objectDestructionOperation struct {
 	replacement         *repository.Object
 	replacementDef      *objectdefs.ObjectDef
 	skullClaim          *skullClaimOperation
+	spotDeletion        gameworld.WildWeedObjectDeletion
+	spotCommit          gameworld.SpotStateCommit
+	adminWildWeedDelete bool
 }
 
 type destructionDroppedRecord struct {
@@ -285,6 +289,15 @@ func (s *ObjectDestructionService) reserve(target types.Handle) (objectDestructi
 	if now.RuntimeSecondsTotal < 0 {
 		return objectDestructionReservation{}, ErrObjectDestructionCapture
 	}
+	spotID, err := managedWildWeedSpotID(s.world, target)
+	if err != nil {
+		return objectDestructionReservation{}, err
+	}
+	if spotID > 0 {
+		if _, ok := s.deps.Persister.(wildWeedDestructionPersister); !ok || s.deps.SpotStateCommitted == nil {
+			return objectDestructionReservation{}, ErrInvalidObjectDestructionService
+		}
+	}
 	coord := types.ChunkCoord{X: chunk.CurrentChunkX, Y: chunk.CurrentChunkY}
 	if info.Layer != s.world.Layer || coord != types.WorldToChunkCoord(int(position.X), int(position.Y), constt.ChunkSize, constt.CoordPerTile) {
 		return objectDestructionReservation{}, ErrObjectDestructionCapture
@@ -302,6 +315,9 @@ func (s *ObjectDestructionService) reserve(target types.Handle) (objectDestructi
 	op.pinned = append(op.pinned[:0], coord)
 	op.seed = uint64(id) ^ s.sequence*0x9e3779b97f4a7c15 ^ uint64(now.UnixMs)
 	op.dropTime, op.due, op.backoff = now.RuntimeSecondsTotal, now.Now, 0
+	if spotID > 0 {
+		op.spotDeletion = gameworld.WildWeedObjectDeletion{SpotID: spotID, EntityID: id, RuntimeSeconds: now.RuntimeSecondsTotal}
+	}
 	op.phase = destructionReserved
 	s.count++
 	s.reserved[target] = slot + 1
@@ -468,6 +484,14 @@ func (s *ObjectDestructionService) finalizeSource(op *objectDestructionOperation
 		}
 		return true
 	}
+	if op.spotCommit.SpotID > 0 {
+		if err := s.deps.SpotStateCommitted(op.spotCommit); err != nil {
+			if s.deps.Logger != nil {
+				s.deps.Logger.Error("Failed to apply committed WWW spot state", zap.Int64("spot_id", op.spotCommit.SpotID), zap.Error(err))
+			}
+			return false
+		}
+	}
 	s.deps.Chunks.RemoveCommittedSource(op.source, op.id)
 	if s.world.Alive(op.target) {
 		if id, ok := s.world.GetExternalID(op.target); ok && id == op.id {
@@ -502,6 +526,9 @@ func (s *ObjectDestructionService) release(op *objectDestructionOperation) {
 	op.replacement = nil
 	op.replacementDef = nil
 	op.skullClaim = nil
+	op.spotDeletion = gameworld.WildWeedObjectDeletion{}
+	op.spotCommit = gameworld.SpotStateCommit{}
+	op.adminWildWeedDelete = false
 	if _, exists := s.reserved[op.target]; exists {
 		s.reserved[op.target] = 0
 	}
@@ -527,6 +554,9 @@ func (op *objectDestructionOperation) Complete(err error) {
 func (op *objectDestructionOperation) Run() error {
 	if op.skullClaim != nil {
 		return op.runSkullClaim()
+	}
+	if op.adminWildWeedDelete {
+		return op.runWildWeedAdminDeletion()
 	}
 	s := op.service
 	if !op.committed {
@@ -635,6 +665,13 @@ func (op *objectDestructionOperation) Run() error {
 			}
 			if op.replacement != nil {
 				return s.deps.Persister.(objectLootTransformationPersister).TransformObjectWithDroppedItems(ctx, op.replacement, op.lastID, next)
+			}
+			if op.spotDeletion.SpotID > 0 {
+				commit, err := s.deps.Persister.(wildWeedDestructionPersister).ReplaceWildWeedWithDroppedItems(ctx, op.region, op.spotDeletion, op.lastID, next)
+				if err == nil {
+					op.spotCommit = commit
+				}
+				return err
 			}
 			return s.deps.Persister.ReplaceObjectWithDroppedItems(ctx, op.region, op.id, op.lastID, next)
 		})

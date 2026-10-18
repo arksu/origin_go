@@ -18,14 +18,12 @@ func validSpotsConfig() SpotsConfig {
 		DistrictSizeTiles: int64(_const.ChunkSize) * 4,
 		RadiusTiles:       int64(_const.ChunkSize) / 2,
 		BaseQuality:       10,
-		PeakQualityMin:    20,
-		PeakQualityMax:    50,
 		Spots: []SpotTypeConfig{
-			{Type: "www", CenterTiles: []int{types.TileConiferousForest, types.TileBroadleafForest, types.TileGrass, types.TileSwamp1}},
-			{Type: "clay", CenterTiles: []int{types.TileClay}},
-			{Type: "soil", CenterTiles: []int{types.TileGrass, types.TileDirt}},
-			{Type: "sand", CenterTiles: []int{types.TileSand}},
-			{Type: "water", CenterTiles: []int{types.TileConiferousForest, types.TileBroadleafForest, types.TileGrass}},
+			{Type: "www", PeakQualityMin: 20, PeakQualityMax: 50, CenterTiles: []int{types.TileConiferousForest, types.TileBroadleafForest, types.TileGrass, types.TileSwamp1}},
+			{Type: "clay", PeakQualityMin: 20, PeakQualityMax: 50, CenterTiles: []int{types.TileClay}},
+			{Type: "soil", PeakQualityMin: 20, PeakQualityMax: 50, CenterTiles: []int{types.TileGrass, types.TileDirt}},
+			{Type: "sand", PeakQualityMin: 20, PeakQualityMax: 50, CenterTiles: []int{types.TileSand}},
+			{Type: "water", PeakQualityMin: 20, PeakQualityMax: 50, CenterTiles: []int{types.TileConiferousForest, types.TileBroadleafForest, types.TileGrass}},
 		},
 	}
 }
@@ -38,8 +36,7 @@ func TestLoadSpotsConfig(t *testing.T) {
 	if !filepath.IsAbs(resolved) {
 		t.Fatalf("resolved path %q is not absolute", resolved)
 	}
-	if config.DistrictSizeTiles != 512 || config.RadiusTiles != 64 || config.BaseQuality != 10 ||
-		config.PeakQualityMin != 20 || config.PeakQualityMax != 50 {
+	if config.DistrictSizeTiles != 512 || config.RadiusTiles != 64 || config.BaseQuality != 10 {
 		t.Fatalf("unexpected defaults: %+v", config)
 	}
 	if len(config.Spots) != spotTypeCount {
@@ -49,6 +46,9 @@ func TestLoadSpotsConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, definition := range config.Spots {
+		if definition.PeakQualityMin != 20 || definition.PeakQualityMax != 50 {
+			t.Fatalf("unexpected quality defaults for %s: %+v", definition.Type, definition)
+		}
 		if definition.Type == "water" {
 			for _, tile := range definition.CenterTiles {
 				if tile != types.TileGrass && tile != types.TileConiferousForest && tile != types.TileBroadleafForest {
@@ -112,9 +112,9 @@ func TestSpotsConfigValidation(t *testing.T) {
 		{"negative radius", func(c *SpotsConfig) { c.RadiusTiles = -1 }},
 		{"radius exceeds district", func(c *SpotsConfig) { c.RadiusTiles = c.DistrictSizeTiles + 1 }},
 		{"base below floor", func(c *SpotsConfig) { c.BaseQuality = 9 }},
-		{"base exceeds min", func(c *SpotsConfig) { c.BaseQuality = c.PeakQualityMin + 1 }},
-		{"min exceeds max", func(c *SpotsConfig) { c.PeakQualityMin = c.PeakQualityMax + 1 }},
-		{"peak exceeds smallint", func(c *SpotsConfig) { c.PeakQualityMax = math.MaxInt16 + 1 }},
+		{"base exceeds min", func(c *SpotsConfig) { c.BaseQuality = c.Spots[0].PeakQualityMin + 1 }},
+		{"min exceeds max", func(c *SpotsConfig) { c.Spots[0].PeakQualityMin = c.Spots[0].PeakQualityMax + 1 }},
+		{"peak exceeds smallint", func(c *SpotsConfig) { c.Spots[0].PeakQualityMax = math.MaxInt16 + 1 }},
 		{"missing type", func(c *SpotsConfig) { c.Spots = c.Spots[:len(c.Spots)-1] }},
 		{"duplicate type", func(c *SpotsConfig) { c.Spots[4].Type = c.Spots[0].Type }},
 		{"unknown type", func(c *SpotsConfig) { c.Spots[4].Type = "stone" }},
@@ -143,8 +143,10 @@ func TestSpotsConfigValidation(t *testing.T) {
 	config := validSpotsConfig()
 	config.RadiusTiles = config.DistrictSizeTiles
 	config.BaseQuality = math.MaxInt16
-	config.PeakQualityMin = math.MaxInt16
-	config.PeakQualityMax = math.MaxInt16
+	for index := range config.Spots {
+		config.Spots[index].PeakQualityMin = math.MaxInt16
+		config.Spots[index].PeakQualityMax = math.MaxInt16
+	}
 	if err := config.Validate(); err != nil {
 		t.Fatalf("inclusive limits: %v", err)
 	}

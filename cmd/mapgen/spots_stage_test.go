@@ -18,10 +18,11 @@ import (
 
 func spotStageGenerator(db *persistence.Postgres, options MapgenOptions) *MapGenerator {
 	perlin := NewPerlinNoise(options.Seed)
+	definitions := append(mapgenTreeDefinitions(), objectdefs.ObjectDef{DefID: 41, Key: wildWeedObjectKey, HP: 100})
 	return &MapGenerator{
 		db: db, logger: zap.NewNop(), chunkSize: _const.ChunkSize,
 		coordPerTile: _const.CoordPerTile, region: 7, seed: options.Seed,
-		options: options, perlin: perlin, objectDefs: objectdefs.NewRegistry(mapgenTreeDefinitions()),
+		options: options, perlin: perlin, objectDefs: objectdefs.NewRegistry(definitions),
 		noiseFields: NewNoiseFieldsWithTerrainScale(perlin, _const.CoordPerTile, options.TerrainScale),
 	}
 }
@@ -128,7 +129,9 @@ func TestMapgenSpotsStagePostgres(t *testing.T) {
 		require.Greater(t, minimumID, previousID)
 		previousID = minimumID
 		require.NoError(t, db.Pool().QueryRow(ctx, "SELECT count(*) FROM spot WHERE last_runtime_seconds = 0 AND state = '{}'::jsonb AND revision = 1").Scan(&count))
-		require.Equal(t, spotTypeCount, count)
+		require.Equal(t, spotTypeCount-1, count)
+		require.NoError(t, db.Pool().QueryRow(ctx, "SELECT count(*) FROM spot WHERE spot_type = 'www' AND last_runtime_seconds = 0 AND state->'www'->'objects' IS NOT NULL AND revision = 2").Scan(&count))
+		require.Equal(t, 1, count)
 		// The stage only completes after the entity-ID checkpoint is durable.
 		_, err := db.Queries().GetGlobalVar(ctx, "last_used_id")
 		require.NoError(t, err)

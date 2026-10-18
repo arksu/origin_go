@@ -13,13 +13,13 @@ import (
 func spotsGeneratorTestConfig() SpotsConfig {
 	return SpotsConfig{
 		Version: 1, DistrictSizeTiles: int64(_const.ChunkSize), RadiusTiles: int64(_const.ChunkSize / 2),
-		BaseQuality: 10, PeakQualityMin: 20, PeakQualityMax: 50,
+		BaseQuality: 10,
 		Spots: []SpotTypeConfig{
-			{Type: "www", CenterTiles: []int{int(tileForestPine), int(tileForestLeaf), int(tileGrass), int(tileSwamp)}},
-			{Type: "clay", CenterTiles: []int{int(tileClay)}},
-			{Type: "soil", CenterTiles: []int{int(tileGrass), int(tileDirt)}},
-			{Type: "sand", CenterTiles: []int{int(tileSand)}},
-			{Type: "water", CenterTiles: []int{int(tileForestPine), int(tileForestLeaf), int(tileGrass)}},
+			{Type: "www", PeakQualityMin: 20, PeakQualityMax: 50, CenterTiles: []int{int(tileForestPine), int(tileForestLeaf), int(tileGrass), int(tileSwamp)}},
+			{Type: "clay", PeakQualityMin: 20, PeakQualityMax: 50, CenterTiles: []int{int(tileClay)}},
+			{Type: "soil", PeakQualityMin: 20, PeakQualityMax: 50, CenterTiles: []int{int(tileGrass), int(tileDirt)}},
+			{Type: "sand", PeakQualityMin: 20, PeakQualityMax: 50, CenterTiles: []int{int(tileSand)}},
+			{Type: "water", PeakQualityMin: 20, PeakQualityMax: 50, CenterTiles: []int{int(tileForestPine), int(tileForestLeaf), int(tileGrass)}},
 		},
 	}
 }
@@ -56,8 +56,10 @@ func TestGenerateSpotsUsesFinalEligibleTilesAndPreservesTerrain(t *testing.T) {
 			t.Fatalf("%s center landed on water", spot.SpotType)
 		}
 		allowed := false
+		var qualityMin, qualityMax int64
 		for _, definition := range config.Spots {
 			if definition.Type == spot.SpotType {
+				qualityMin, qualityMax = definition.PeakQualityMin, definition.PeakQualityMax
 				for _, tileID := range definition.CenterTiles {
 					allowed = allowed || int(tile) == tileID
 				}
@@ -71,7 +73,7 @@ func TestGenerateSpotsUsesFinalEligibleTilesAndPreservesTerrain(t *testing.T) {
 			spot.Radius != int(config.RadiusTiles)*_const.CoordPerTile {
 			t.Fatalf("geometry did not use the world coordinate scale: %+v", spot)
 		}
-		if int64(spot.PeakQuality) < config.PeakQualityMin || int64(spot.PeakQuality) > config.PeakQualityMax {
+		if int64(spot.PeakQuality) < qualityMin || int64(spot.PeakQuality) > qualityMax {
 			t.Fatalf("quality out of inclusive range: %+v", spot)
 		}
 		if stats.Generated[spot.SpotType] != 1 || stats.Skipped[spot.SpotType] != 0 {
@@ -244,22 +246,26 @@ func TestGenerateSpotsDeterministicAcrossConfigOrderAndIndependentOfObjectRandom
 
 func TestGenerateSpotsQualityRangeIncludesBothEndpoints(t *testing.T) {
 	config := spotsGeneratorTestConfig()
-	config.PeakQualityMin, config.PeakQualityMax = 20, 21
+	for index := range config.Spots {
+		config.Spots[index].PeakQualityMin, config.Spots[index].PeakQualityMax = 20, 21
+	}
 	terrain := &TerrainPrecompute{WidthTiles: 1, HeightTiles: 1, Tiles: []byte{tileGrass}}
 	seen := map[int16]bool{}
 	for seed := int64(1); seed <= 16; seed++ {
 		spots, _ := collectGeneratedSpots(t, terrain, config, seed)
 		for _, spot := range spots {
-			if int64(spot.PeakQuality) < config.PeakQualityMin || int64(spot.PeakQuality) > config.PeakQualityMax {
+			if spot.PeakQuality < 20 || spot.PeakQuality > 21 {
 				t.Fatalf("quality outside configured range: %+v", spot)
 			}
 			seen[spot.PeakQuality] = true
 		}
 	}
-	if !seen[int16(config.PeakQualityMin)] || !seen[int16(config.PeakQualityMax)] {
+	if !seen[20] || !seen[21] {
 		t.Fatalf("did not produce both inclusive endpoints: %v", seen)
 	}
-	config.PeakQualityMin, config.PeakQualityMax = 32767, 32767
+	for index := range config.Spots {
+		config.Spots[index].PeakQualityMin, config.Spots[index].PeakQualityMax = 32767, 32767
+	}
 	spots, _ := collectGeneratedSpots(t, terrain, config, 1)
 	for _, spot := range spots {
 		if spot.PeakQuality != 32767 {

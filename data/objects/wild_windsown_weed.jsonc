@@ -1,0 +1,28 @@
+{
+  "v": 1,
+  "source": "wild_windsown_weed",
+  "objects": [
+    {
+      "defId": 41,
+      "key": "wild_windsown_weed",
+      "name": "Wild Windsown Weed",
+      "static": true,
+      "hp": 100,
+      "components": {
+        "collider": { "w": 4, "h": 4, "layer": 1, "mask": 1 }
+      },
+      "resource": "wild_windsown_weed/3",
+      "appearance": [
+        { "id": "stem", "when": { "flags": ["wild_weed.stage0"] }, "resource": "wild_windsown_weed/0" },
+        { "id": "young", "when": { "flags": ["wild_weed.stage1"] }, "resource": "wild_windsown_weed/1" },
+        { "id": "panicles", "when": { "flags": ["wild_weed.stage2"] }, "resource": "wild_windsown_weed/2" },
+        { "id": "mature", "when": { "flags": ["wild_weed.stage3"] }, "resource": "wild_windsown_weed/3" }
+      ],
+      "behaviors": {
+        "wild_weed": {
+          "seedOutcomes": ["seed_wheat", "seed_carrot", "seed_beet", "seed_potato"]
+        }
+      }
+    }
+  ]
+}

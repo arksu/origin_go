@@ -178,6 +178,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		Chunks: s.chunkManager, Persister: worldObjectPersistence, IDs: entityIDManager,
 		Items: itemdefs.Global(), WithWorldRead: s.WithWorldRead, Quarantine: s.quarantineDestroyedObject,
 		TransformCommitted: s.completeCorpseDecay,
+		SpotStateCommitted: s.applyCommittedSpotState,
 		SkullGranted:       s.skullGranted, SkullRejected: s.skullClaimRejected,
 		MinX: minX, MinY: minY, MaxX: maxX, MaxY: maxY, Region: cfg.Game.Region, Logger: logger,
 	})
@@ -337,7 +338,9 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	networkCmdSystem.SetContextPendingTTL(cfg.Game.InteractionPendingTimeout)
 
 	adminHandler := NewChatAdminCommandHandler(inventoryExecutor, s, s, s, entityIDManager, s.chunkManager, visionSystem, behaviorRegistry, s.eventBus, logger)
-	adminHandler.SetObjectDeleter(worldObjectPersistence)
+	adminHandler.SetObjectDeleter(wildWeedAdminDeleter{
+		destruction: s.objectDestruction, fallback: worldObjectPersistence,
+	})
 	adminHandler.SetContainerCloseSender(s)
 	adminHandler.SetLifeDeathFactor(cfg.Game.LifeDeathFactor)
 	adminHandler.SetAllowReviveCommand(strings.EqualFold(cfg.Game.Env, "dev"))

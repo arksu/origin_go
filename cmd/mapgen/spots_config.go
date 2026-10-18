@@ -26,15 +26,15 @@ type SpotsConfig struct {
 	DistrictSizeTiles int64            `yaml:"district_size_tiles"`
 	RadiusTiles       int64            `yaml:"radius_tiles"`
 	BaseQuality       int64            `yaml:"base_quality"`
-	PeakQualityMin    int64            `yaml:"peak_quality_min"`
-	PeakQualityMax    int64            `yaml:"peak_quality_max"`
 	Spots             []SpotTypeConfig `yaml:"spots"`
 }
 
 type SpotTypeConfig struct {
-	Type        string   `yaml:"type"`
-	CenterTiles []int    `yaml:"center_tiles"`
-	SpawnChance *float64 `yaml:"spawn_chance,omitempty"`
+	Type           string   `yaml:"type"`
+	CenterTiles    []int    `yaml:"center_tiles"`
+	SpawnChance    *float64 `yaml:"spawn_chance,omitempty"`
+	PeakQualityMin int64    `yaml:"peak_quality_min"`
+	PeakQualityMax int64    `yaml:"peak_quality_max"`
 }
 
 func (definition SpotTypeConfig) spawnChance() float64 {
@@ -128,9 +128,8 @@ func (config SpotsConfig) Validate() error {
 	if config.RadiusTiles <= 0 || config.RadiusTiles > config.DistrictSizeTiles {
 		return fmt.Errorf("radius_tiles must be positive and no greater than district_size_tiles")
 	}
-	if config.BaseQuality < 10 || config.BaseQuality > config.PeakQualityMin ||
-		config.PeakQualityMin > config.PeakQualityMax || config.PeakQualityMax > math.MaxInt16 {
-		return fmt.Errorf("quality must satisfy 10 <= base_quality <= peak_quality_min <= peak_quality_max <= %d", math.MaxInt16)
+	if config.BaseQuality < 10 {
+		return fmt.Errorf("base_quality must be at least 10")
 	}
 	if len(config.Spots) != spotTypeCount {
 		return fmt.Errorf("spots must declare each of www, clay, soil, sand, water exactly once")
@@ -145,6 +144,9 @@ func (config SpotsConfig) Validate() error {
 			return fmt.Errorf("duplicate spot type %q", definition.Type)
 		}
 		seen[index] = true
+		if definition.PeakQualityMin < config.BaseQuality || definition.PeakQualityMin > definition.PeakQualityMax || definition.PeakQualityMax > math.MaxInt16 {
+			return fmt.Errorf("spot %q quality must satisfy base_quality (%d) <= peak_quality_min <= peak_quality_max <= %d", definition.Type, config.BaseQuality, math.MaxInt16)
+		}
 		chance := definition.spawnChance()
 		if math.IsNaN(chance) || math.IsInf(chance, 0) || chance < 0 || chance > 1 {
 			return fmt.Errorf("spot %q spawn_chance must be finite and between 0 and 1", definition.Type)

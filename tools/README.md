@@ -201,6 +201,9 @@ interactive PNG resources. No atlas build is needed.
 
 `python3 tools/export_wild_windsown_sprites.py --check` verifies the approved source
 hashes, dimensions, alpha, shared ground contact and byte-exact runtime PNGs.
+The same exporter publishes `items/wild_windsown_weed.png` as a transparent 30x30
+inventory icon, fitting the approved mature frame proportionally with nearest
+neighbor sampling. It verifies that icon with the same `--check` command.
 
 ## Mulberry tree sprites
 

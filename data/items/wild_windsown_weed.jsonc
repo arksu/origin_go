@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "source": "wild_windsown_weed",
+  "items": [
+    {
+      "defId": 4006,
+      "key": "wild_windsown_weed",
+      "name": "Wild Windsown Weed",
+      "resource": "items/wild_windsown_weed.png",
+      "tags": [],
+      "size": { "w": 1, "h": 1 }
+    }
+  ]
+}

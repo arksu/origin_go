@@ -1010,6 +1010,12 @@ func (f *ObjectFactory) DeserializeObjectState(raw *repository.Object) (any, err
 				return nil, fmt.Errorf("failed to decode drying state: %w", err)
 			}
 			runtimeState.Behaviors[behaviorKey] = &dryingState
+		case "wild_weed":
+			var weedState components.WildWeedBehaviorState
+			if err := json.Unmarshal(rawBehaviorState, &weedState); err != nil {
+				return nil, fmt.Errorf("failed to decode wild weed state: %w", err)
+			}
+			runtimeState.Behaviors[behaviorKey] = &weedState
 		case "player_dead":
 			var corpseState components.CorpseDecayBehaviorState
 			if err := json.Unmarshal(rawBehaviorState, &corpseState); err != nil {

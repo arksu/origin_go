@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "bindings": [
+    {
+      "key": "wild_weed_pick",
+      "source": { "kind": "context", "namespace": "wild_weed", "id": "pick" },
+      "actor": "character/male_commoner",
+      "variants": [{ "clip": "pick_up", "equipment": [] }],
+      "eligibility": ["stationary", "not_carrying", "not_knocked_out"],
+      "facing": "target",
+      "blend_ms": 120,
+      "frame": { "width": 192, "height": 224, "origin_x": 96, "origin_y": 180 },
+      "unbind_equipment_slots": ["left_hand", "right_hand"],
+      "preview": { "label": "Pick Wild Windsown Weed", "duration_ms": 1000, "equipment": [] }
+    }
+  ]
+}

@@ -260,6 +260,9 @@ func (g *MapGenerator) Generate(ctx context.Context) error {
 		if err := spotsConfig.ValidateForWorld(width, height); err != nil {
 			return fmt.Errorf("validate spots for world: %w", err)
 		}
+		if _, err := g.wildWeedDefinition(); err != nil {
+			return err
+		}
 		g.logger.Info("loaded spot configuration", zap.String("path", resolvedPath))
 	}
 
@@ -360,17 +363,23 @@ func (g *MapGenerator) Generate(ctx context.Context) error {
 	g.logger.Info("saved last entity ID", zap.Uint64("last_entity_id", g.lastEntityID.Load()))
 
 	var spotStats SpotGenerationStats
+	var wildWeedCount int
 	if err := g.db.WithTx(ctx, func(queries *repository.Queries) error {
 		var err error
 		spotStats, err = writeSpotBatches(ctx, terrain, spotsConfig, g.seed,
 			g.region, 0, queries.InsertSpots)
+		if err != nil {
+			return err
+		}
+		wildWeedCount, err = g.writeWildWeeds(ctx, queries)
 		return err
 	}); err != nil {
-		return fmt.Errorf("generate and save spots: %w", err)
+		return fmt.Errorf("generate and save spots and WWW: %w", err)
 	}
 	g.logger.Info("spot generation completed", zap.Any("generated", spotStats.Generated),
 		zap.Any("skipped_no_eligible_tile", spotStats.Skipped),
-		zap.Any("skipped_by_chance", spotStats.SkippedByChance), zap.Uint64("districts", spotStats.Districts))
+		zap.Any("skipped_by_chance", spotStats.SkippedByChance), zap.Uint64("districts", spotStats.Districts),
+		zap.Int("wild_weed_count", wildWeedCount))
 
 	return nil
 }

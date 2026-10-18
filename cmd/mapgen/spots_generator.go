@@ -81,11 +81,15 @@ func GenerateSpots(ctx context.Context, terrain *TerrainPrecompute, config Spots
 	var eligibleTypes [256]uint8
 	var typeSalts [spotTypeCount]uint64
 	var spawnChances [spotTypeCount]float64
+	var qualityMins [spotTypeCount]int64
+	var qualityRanges [spotTypeCount]uint64
 	for index, spotType := range spotTypes {
 		typeSalts[index] = spotTypeSalt(spotType)
 		for _, definition := range config.Spots {
 			if definition.Type == spotType {
 				spawnChances[index] = definition.spawnChance()
+				qualityMins[index] = definition.PeakQualityMin
+				qualityRanges[index] = uint64(definition.PeakQualityMax - definition.PeakQualityMin + 1)
 				for _, tileID := range definition.CenterTiles {
 					eligibleTypes[tileID] |= 1 << index
 				}
@@ -153,8 +157,7 @@ func GenerateSpots(ctx context.Context, terrain *TerrainPrecompute, config Spots
 					return stats, err
 				}
 				qualityHash := spotCoordinateHash(seed, districtX, districtY, typeSalts[index]^spotQualitySalt)
-				qualityRange := uint64(config.PeakQualityMax - config.PeakQualityMin + 1)
-				quality := config.PeakQualityMin + int64(qualityHash%qualityRange)
+				quality := qualityMins[index] + int64(qualityHash%qualityRanges[index])
 				spot := GeneratedSpot{
 					SpotType: spotType, DistrictX: districtX, DistrictY: districtY,
 					CenterX: centerX, CenterY: centerY, Radius: radius, PeakQuality: int16(quality),

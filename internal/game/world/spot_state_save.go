@@ -55,9 +55,13 @@ func (m *SpotManager) Update(now time.Time) {
 		job.ready = false
 		job.mu.Unlock()
 		if ready && err == nil {
-			job.spot.state = SpotStateSnapshot{
-				State: job.write.State, Revision: job.write.ExpectedRevision + 1,
-				LastRuntimeSeconds: job.write.RuntimeSeconds,
+			// Another object transaction may have published a newer revision while
+			// this standalone acknowledgement was waiting for the owning shard.
+			if revision := job.write.ExpectedRevision + 1; revision > job.spot.state.Revision {
+				job.spot.state = SpotStateSnapshot{
+					State: job.write.State, Revision: revision,
+					LastRuntimeSeconds: job.write.RuntimeSeconds,
+				}
 			}
 			job.spot.pending = nil
 			last := len(m.pending) - 1

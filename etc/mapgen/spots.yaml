@@ -4,23 +4,32 @@ district_size_tiles: 512
 radius_tiles: 64
 
 base_quality: 10
-peak_quality_min: 20
-peak_quality_max: 50
 
 spots:
 # One deterministic roll per district and type; omitted spawn_chance defaults to 1.
+# Each type has its own inclusive peak quality range.
 - type: www
+  peak_quality_min: 10
+  peak_quality_max: 16
   center_tiles: [20, 25, 35, 50]
-  spawn_chance: 0.15
+  spawn_chance: 0.3
 - type: clay
+  peak_quality_min: 10
+  peak_quality_max: 50
   center_tiles: [64]
   spawn_chance: 0.5
 - type: soil
+  peak_quality_min: 10
+  peak_quality_max: 50
   center_tiles: [35, 60]
   spawn_chance: 0.5
 - type: sand
+  peak_quality_min: 10
+  peak_quality_max: 50
   center_tiles: [68]
   spawn_chance: 0.5
 - type: water
+  peak_quality_min: 10
+  peak_quality_max: 50
   center_tiles: [20, 25, 35]
   spawn_chance: 0.5

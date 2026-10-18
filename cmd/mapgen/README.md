@@ -58,8 +58,15 @@ underground well source and has its center on grass or forest. A district with
 no eligible center tile skips that type. Centers cannot be on water; circles
 may overlap water, other districts, other spots, and the world boundary.
 
+Each type declares its own required `peak_quality_min` and `peak_quality_max`
+inside its `spots` entry. The bounds are inclusive and must satisfy
+`base_quality <= peak_quality_min <= peak_quality_max <= 32767`. All five types
+default to 20–50. Changing one type's range changes only its peak qualities;
+centers, spawn decisions and other types are unchanged. In custom configs, move
+the former top-level peak-quality bounds into each type entry.
+
 Each type can set `spawn_chance` from 0 to 1 (omitted defaults to 1). The default
-config uses 0.25 for `www` and 1 for the other types. This is one deterministic
+config uses 0.15 for `www` and 0.5 for the other types. This is one deterministic
 roll per district/type using the map seed, independent of eligible tile count:
 0 disables that type, 1 always places it when terrain allows, and 0.25 gives a
 25% chance in each eligible district rather than an exact 25% quota. Changing
@@ -73,16 +80,29 @@ interactive previews do not load spot config or write spots. PNG export alongsid
 full database generation still generates spots.
 
 Generation streams five candidates per district and inserts batches of at most
-1000 spots in one transaction. An insertion error rolls back that stage. The
+1000 spots in one transaction. That transaction also creates mature WWW objects,
+their spot manifests, affected chunk counts and the final entity ID checkpoint.
+An insertion error rolls back that stage. The
 world reset commits before chunk/object/spot generation, so a later generation
 failure does not restore the previous world. The reset truncates all world
 tables and reseeds the shared entity ID checkpoint in one transaction;
-SQL sequences, including spot IDs, continue. Spots store geometry, peak quality,
-`{}` state, revision `1`, and runtime timestamp `0` for the new world.
-No generation metadata is stored.
+SQL sequences, including spot IDs, continue. Other spot types retain `{}` state
+and revision `1`. WWW stores `www.objects`, keyed by exact decimal EntityID with
+world-coordinate `{x,y}` values, at revision `2`; runtime remains `0`.
 
-This stage does not change resource gathering, digging, wells, or runtime
-regeneration. Feature details: [spots](../../docs/features/spot.md).
+WWW initially targets `floor(0.01 * pi * radius_tiles^2)` plants per spot: 128
+at radius 64. Each candidate is a tile center inside the circle on final terrain
+20, 25, 35 or 50; shallow/deep water is always excluded. A point must be at least
+20 world units from every existing object's coordinates, including neighboring
+chunks and WWW accepted earlier in the transaction. No collider checks are used.
+Insufficient suitable positions reduce the actual count. Quality decreases
+linearly from the spot peak toward Q10 at its edge. Placement has its own seeded
+RNG and does not change tree/boulder or spot geometry randomness.
+
+WWW collection and regrowth use the normal object behavior runtime; destruction
+atomically removes the object and its manifest entry. Runtime replacement of
+destroyed plants is outside this stage. Feature details:
+[WWW](../../docs/features/wild_windsown_plan.md) and [spots](../../docs/features/spot.md).
 
 ## Интерактивный предпросмотр слоёв (preview_server.go)
 

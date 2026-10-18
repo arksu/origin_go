@@ -28,7 +28,8 @@ func (p *DroppedItemPersisterDB) ReplaceObjectWithDroppedItems(
 	maxAllocatedID types.EntityID,
 	next func(dst []inventory.DroppedItemPersistenceRecord) ([]inventory.DroppedItemPersistenceRecord, error),
 ) error {
-	return p.persistObjectReplacement(ctx, region, sourceID, maxAllocatedID, nil, next)
+	_, err := p.persistObjectReplacement(ctx, region, sourceID, maxAllocatedID, nil, next, nil)
+	return err
 }
 
 // TransformObjectWithDroppedItems atomically releases every source inventory
@@ -44,7 +45,8 @@ func (p *DroppedItemPersisterDB) TransformObjectWithDroppedItems(
 	if err := validateCommittedSource(replacement); err != nil {
 		return err
 	}
-	return p.persistObjectReplacement(ctx, replacement.Region, types.EntityID(replacement.ID), maxAllocatedID, replacement, next)
+	_, err := p.persistObjectReplacement(ctx, replacement.Region, types.EntityID(replacement.ID), maxAllocatedID, replacement, next, nil)
+	return err
 }
 
 func validateCommittedSource(raw *repository.Object) error {
@@ -70,11 +72,13 @@ func (p *DroppedItemPersisterDB) persistObjectReplacement(
 	maxAllocatedID types.EntityID,
 	replacement *repository.Object,
 	next func(dst []inventory.DroppedItemPersistenceRecord) ([]inventory.DroppedItemPersistenceRecord, error),
-) error {
+	wildWeed *WildWeedObjectDeletion,
+) (SpotStateCommit, error) {
 	if p == nil || p.db == nil || ctx == nil || next == nil || region <= 0 || sourceID == 0 || sourceID > math.MaxInt64 || maxAllocatedID > math.MaxInt64 {
-		return fmt.Errorf("replace destroyed object: invalid dependencies or source")
+		return SpotStateCommit{}, fmt.Errorf("replace destroyed object: invalid dependencies or source")
 	}
-	return p.db.WithTx(ctx, func(q *repository.Queries) error {
+	var commit SpotStateCommit
+	err := p.db.WithTx(ctx, func(q *repository.Queries) error {
 		var buffer [destructionPersistenceBatchSize]inventory.DroppedItemPersistenceRecord
 		for {
 			batch, err := next(buffer[:0])
@@ -105,7 +109,15 @@ func (p *DroppedItemPersisterDB) persistObjectReplacement(
 			}
 		}
 		if replacement == nil {
-			return deleteObjectRows(ctx, q, region, sourceID, true)
+			if err := deleteObjectRows(ctx, q, region, sourceID, true); err != nil {
+				return err
+			}
+			if wildWeed != nil {
+				var err error
+				commit, err = deleteWildWeedSpotObject(ctx, q, region, *wildWeed)
+				return err
+			}
+			return nil
 		}
 		if err := q.DeleteInventoriesByOwner(ctx, int64(sourceID)); err != nil {
 			return fmt.Errorf("delete transformed object inventories: %w", err)
@@ -122,6 +134,10 @@ func (p *DroppedItemPersisterDB) persistObjectReplacement(
 		}
 		return nil
 	})
+	if err != nil {
+		return SpotStateCommit{}, err
+	}
+	return commit, nil
 }
 
 func persistDestructionBatch(ctx context.Context, q *repository.Queries, region int, sourceID types.EntityID, records []inventory.DroppedItemPersistenceRecord) error {

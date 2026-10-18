@@ -21,6 +21,52 @@ func (q *Queries) DeleteSpotsByRegion(ctx context.Context, region int) error {
 	return err
 }
 
+const deleteWildWeedSpotObject = `-- name: DeleteWildWeedSpotObject :one
+UPDATE spot
+SET state = state #- ARRAY['www', 'objects', $1::text],
+	revision = revision + CASE
+		WHEN jsonb_exists(state -> 'www' -> 'objects', $1::text) THEN 1
+		ELSE 0 END,
+	last_runtime_seconds = CASE
+		WHEN jsonb_exists(state -> 'www' -> 'objects', $1::text)
+		THEN GREATEST(last_runtime_seconds, $2::bigint)
+		ELSE last_runtime_seconds END
+WHERE id = $3::bigint AND region = $4::int
+	AND spot_type = 'www'
+	AND jsonb_typeof(state -> 'www') = 'object'
+	AND jsonb_typeof(state -> 'www' -> 'objects') = 'object'
+	AND (revision < 9223372036854775807
+		OR NOT jsonb_exists(state -> 'www' -> 'objects', $1::text))
+RETURNING state, revision, last_runtime_seconds
+`
+
+type DeleteWildWeedSpotObjectParams struct {
+	ObjectID       string `json:"object_id"`
+	RuntimeSeconds int64  `json:"runtime_seconds"`
+	ID             int64  `json:"id"`
+	Region         int    `json:"region"`
+}
+
+type DeleteWildWeedSpotObjectRow struct {
+	State              json.RawMessage `json:"state"`
+	Revision           int64           `json:"revision"`
+	LastRuntimeSeconds int64           `json:"last_runtime_seconds"`
+}
+
+// Modify the current JSON row under PostgreSQL's row lock. Independent deletes
+// never replace each other's manifests; an ambiguous-commit retry is a no-op.
+func (q *Queries) DeleteWildWeedSpotObject(ctx context.Context, arg DeleteWildWeedSpotObjectParams) (DeleteWildWeedSpotObjectRow, error) {
+	row := q.db.QueryRowContext(ctx, deleteWildWeedSpotObject,
+		arg.ObjectID,
+		arg.RuntimeSeconds,
+		arg.ID,
+		arg.Region,
+	)
+	var i DeleteWildWeedSpotObjectRow
+	err := row.Scan(&i.State, &i.Revision, &i.LastRuntimeSeconds)
+	return i, err
+}
+
 const insertSpots = `-- name: InsertSpots :exec
 INSERT INTO spot (
 	region, layer, spot_type, district_x, district_y,
