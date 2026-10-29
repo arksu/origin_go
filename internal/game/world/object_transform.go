@@ -7,6 +7,7 @@ import (
 	"origin/internal/eventbus"
 	"origin/internal/game/behaviors/contracts"
 	"origin/internal/objectdefs"
+	"origin/internal/playerstate"
 	"origin/internal/types"
 
 	"go.uber.org/zap"
@@ -61,16 +62,54 @@ func TransformObjectToDefInPlace(
 	if !hasInfo {
 		return false
 	}
+	// Dropping a persistent identity would require a durable row deletion.
+	// This helper only supports transformations that can be persisted by upsert.
+	if !targetInfo.Transient && newDef.Transient {
+		return false
+	}
 	if !ecs.HasComponent[components.ObjectInternalState](w, targetHandle) {
 		return false
 	}
+	var spatial *core.SpatialHashGrid
+	var position components.Transform
+	if targetInfo.IsStatic != newDef.IsStatic && opts.Chunks != nil {
+		if ref, hasRef := ecs.GetComponent[components.ChunkRef](w, targetHandle); hasRef {
+			chunk := opts.Chunks.GetChunkFast(types.ChunkCoord{X: ref.CurrentChunkX, Y: ref.CurrentChunkY})
+			// An unavailable chunk has no local spatial index to migrate.
+			if chunk != nil {
+				var hasPosition bool
+				position, hasPosition = ecs.GetComponent[components.Transform](w, targetHandle)
+				if !hasPosition {
+					return false
+				}
+				spatial = chunk.Spatial()
+			}
+		}
+	}
 	previousTypeID := targetInfo.TypeID
+	if newDef.NPCConfig == nil && ecs.HasComponent[components.NPCBrain](w, targetHandle) {
+		playerstate.StopMovement(w, targetHandle)
+		ecs.RemoveComponent[components.NPCBrain](w, targetHandle)
+		ecs.RemoveComponent[components.Movement](w, targetHandle)
+		ecs.RemoveComponent[components.CollisionResult](w, targetHandle)
+	}
+	if spatial != nil {
+		x, y := int(position.X), int(position.Y)
+		if targetInfo.IsStatic {
+			spatial.RemoveStatic(targetHandle, x, y)
+			spatial.AddDynamic(targetHandle, x, y)
+		} else {
+			spatial.RemoveDynamic(targetHandle, x, y)
+			spatial.AddStatic(targetHandle, x, y)
+		}
+	}
 
 	ecs.WithComponent(w, targetHandle, func(info *components.EntityInfo) {
 		info.TypeID = uint32(newDef.DefID)
 		info.Behaviors = newDef.CopyBehaviorOrder()
 		info.IsStatic = newDef.IsStatic
 		info.Indestructible = newDef.Indestructible
+		info.Transient = newDef.Transient
 		if opts.QualityOverride != nil {
 			info.Quality = *opts.QualityOverride
 		}
@@ -164,7 +203,7 @@ func TransformObjectToDefInPlace(
 			X: chunkRef.CurrentChunkX,
 			Y: chunkRef.CurrentChunkY,
 		})
-		if chunk != nil {
+		if chunk != nil && !newDef.Transient {
 			chunk.MarkRawDataDirty()
 		}
 	}

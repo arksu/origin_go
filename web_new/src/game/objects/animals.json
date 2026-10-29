@@ -1,5 +1,44 @@
 {
   "fox": {
+    "size": [
+      42,
+      34
+    ],
+    "offset": [
+      19,
+      22
+    ],
+    "layers": [
+      {
+        "spriteSheet": {
+          "img": "animals/fox/fox.png",
+          "frameSize": [
+            42,
+            34
+          ],
+          "frameCount": 4,
+          "frameDurationMs": 180,
+          "cycleDistanceTiles": 1.92,
+          "directions": [
+            "NE",
+            "N",
+            "E",
+            "SE",
+            "NW",
+            "W",
+            "S",
+            "SW"
+          ],
+          "idleFrame": 0
+        },
+        "interactive": true,
+        "offset": [
+          0,
+          0
+        ],
+        "z": 0
+      }
+    ],
     "0": {
       "offset": [
         33,

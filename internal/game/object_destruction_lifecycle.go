@@ -29,6 +29,9 @@ func (s *Shard) quarantineDestroyedObject(target types.Handle) {
 			chunk.Spatial().RemoveDynamic(target, int(position.X), int(position.Y))
 		}
 	}
+	// Dynamic objects must not move or re-enter the spatial index while dead.
+	playerstate.StopMovement(w, target)
+	ecs.RemoveComponent[components.Movement](w, target)
 	ecs.RemoveComponent[components.Collider](w, target)
 	ecs.RemoveComponent[components.StationState](w, target)
 	ecs.WithComponent(w, target, func(info *components.EntityInfo) { info.Behaviors = nil })

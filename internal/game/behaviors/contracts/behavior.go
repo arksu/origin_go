@@ -250,6 +250,8 @@ type BehaviorResult struct {
 }
 
 // BehaviorTickContext contains scheduled behavior tick execution data.
+// BehaviorTickContext is borrowed for the synchronous callback only. Behaviors
+// must not retain the context or use it from another goroutine.
 type BehaviorTickContext struct {
 	World        *ecs.World
 	Handle       types.Handle

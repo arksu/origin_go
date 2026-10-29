@@ -1,0 +1,30 @@
+{
+  "v": 1,
+  "source": "animals",
+  "objects": [
+    {
+      "defId": 42,
+      "key": "fox",
+      "name": "Fox",
+      "static": false,
+      "transient": true,
+      "hp": 110,
+      "resource": "fox",
+      "components": {
+        "collider": { "w": 4.8, "h": 7.2, "layer": 1, "mask": 1 }
+      },
+      "behaviors": {
+        "npc_ai": {
+          "profile": "passive_wander",
+          "speed": 32,
+          "idleMinSeconds": 8,
+          "idleMaxSeconds": 16,
+          "wanderMinTiles": 1,
+          "wanderMaxTiles": 3,
+          "homeRadiusTiles": 6,
+          "maxWalkSeconds": 3
+        }
+      }
+    }
+  ]
+}

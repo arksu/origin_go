@@ -244,6 +244,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	openContainerService.SetBehaviorRegistry(behaviorRegistry)
 	behaviorExecutionDeps := &contracts.ExecutionDeps{
 		EventBus: s.eventBus, Logger: logger, ExhaustBurner: burnerExhaustion.exhaust,
+		Chunks:      s.chunkManager,
 		IDAllocator: entityIDManager,
 		RootInventoryUpdate: func(w *ecs.World, rootID types.EntityID) {
 			broadcastRootInventoryUpdate(w, openContainerService, rootID)
@@ -346,6 +347,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	adminHandler.SetObjectDeleter(wildWeedAdminDeleter{
 		destruction: s.objectDestruction, fallback: worldObjectPersistence,
 	})
+	adminHandler.SetTransientObjectRemover(s.objectDestruction.RemoveTransient)
 	adminHandler.SetContainerCloseSender(s)
 	adminHandler.SetLifeDeathFactor(cfg.Game.LifeDeathFactor)
 	adminHandler.SetAllowReviveCommand(strings.EqualFold(cfg.Game.Env, "dev"))
@@ -360,6 +362,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	collisionSystem := systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles)
 	collisionSystem.SetObjectCollisionFilter(s.objectCollisionFilter)
 	s.world.AddSystem(collisionSystem)
+	s.world.AddSystem(behaviors.NewNPCMovementGuard(s.world, s.chunkManager))
 	s.world.AddSystem(systems.NewBuildPlacementSystem(s.world, buildService, logger))
 	s.world.AddSystem(systems.NewLiftPlacementSystem(s.world, liftService, logger))
 	transformSystem := systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger)
@@ -972,6 +975,7 @@ func (s *Shard) convertPlayerEntityToCorpse(w *ecs.World, playerID types.EntityI
 		Behaviors:      def.CopyBehaviorOrder(),
 		IsStatic:       true,
 		Indestructible: def.Indestructible,
+		Transient:      def.Transient,
 		Region:         s.cfg.Game.Region,
 		Layer:          s.layer,
 	}

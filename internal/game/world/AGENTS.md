@@ -25,13 +25,16 @@
 - `EntityInfo.Indestructible` caches the current object definition at common spawn,
   database/portable restore, in-place transform (including the same type), and corpse
   conversion. It is never persisted; restored payloads cannot override the current definition.
+- `EntityInfo.Transient` also caches the current definition. Transient objects are
+  excluded before save/delete selection and from unload snapshots/inventories.
+  Their dirty runtime state never requests a save. Chunk deactivation despawns them.
 - `ObjectInternalState.IsDirty` is used for save filtering.
 - Object HP is stored in typed `ObjectInternalState.HP/HasHP` fields and persisted
   separately as `object.hp`; `HasHP` distinguishes missing health from valid zero.
   Restoring behavior state must preserve these fields. Mutate HP through
   `SetObjectHP` under the shard lock to update HP and dirty intent together.
 - Empty behavior state persists as `NULL` (not empty JSON payload).
-- Runtime despawns of chunk-owned objects must preserve delete intent until chunk save (tombstone/deferred delete), otherwise objects can reappear after restart.
+- Runtime despawns of persistent chunk-owned objects must preserve delete intent until chunk save (tombstone/deferred delete), otherwise objects can reappear after restart. Inventory-free transient objects use shared quarantine/despawn without a DB row or tombstone.
 
 ## Runtime Transform / Despawn Contracts
 

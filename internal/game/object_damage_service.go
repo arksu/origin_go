@@ -28,12 +28,13 @@ type ObjectDamageResult struct {
 	EnteredDestruction               bool
 }
 
-// objectDamageCommit is a same-lock plan. Fatal plans reserve persistence before
-// any hit in the action is committed; quarantine follows all health writes.
+// objectDamageCommit is a same-lock plan. Persistent fatalities reserve storage
+// before any hit is committed; transient removal and quarantine follow all writes.
 type objectDamageCommit struct {
 	target      types.Handle
 	result      ObjectDamageResult
 	reservation objectDestructionReservation
+	transient   bool
 }
 
 // ObjectDamageService receives already calculated Draw without weapon rules.
@@ -163,6 +164,13 @@ func (s *ObjectDamageService) reserveDamage(commit *objectDamageCommit) error {
 	if !commit.result.EnteredDestruction {
 		return nil
 	}
+	if info, ok := s.info.Get(commit.target); ok && info.Transient {
+		if err := s.destruction.validateTransientRemoval(commit.target); err != nil {
+			return err
+		}
+		commit.transient = true
+		return nil
+	}
 	reservation, err := s.destruction.reserve(commit.target)
 	if err != nil {
 		return err
@@ -172,7 +180,7 @@ func (s *ObjectDamageService) reserveDamage(commit *objectDamageCommit) error {
 }
 
 func (s *ObjectDamageService) abortDamage(commit objectDamageCommit) {
-	if commit.result.EnteredDestruction {
+	if commit.result.EnteredDestruction && !commit.transient {
 		s.destruction.cancelReservation(commit.reservation)
 	}
 }
@@ -181,8 +189,12 @@ func (s *ObjectDamageService) commitDamage(commit objectDamageCommit) {
 	if commit.result.Damage == 0 {
 		return
 	}
-	if commit.result.EnteredDestruction && !s.destruction.commitReservation(commit.reservation) {
-		panic("object damage: invalid same-lock reservation")
+	if commit.result.EnteredDestruction {
+		if commit.transient {
+			s.state.Pending[commit.target] = true
+		} else if !s.destruction.commitReservation(commit.reservation) {
+			panic("object damage: invalid same-lock reservation")
+		}
 	}
 	s.writeDamage(commit.target, commit.result.AfterHP)
 }
@@ -195,7 +207,14 @@ func (s *ObjectDamageService) writeDamage(target types.Handle, afterHP float64) 
 }
 
 func (s *ObjectDamageService) finalizeDamage(commit objectDamageCommit) {
-	if commit.result.EnteredDestruction && !s.destruction.finalizeReservation(commit.reservation) {
+	if !commit.result.EnteredDestruction {
+		return
+	}
+	if commit.transient {
+		s.destruction.finalizeTransientRemoval(commit.target)
+		return
+	}
+	if !s.destruction.finalizeReservation(commit.reservation) {
 		panic("object damage: invalid same-lock finalization")
 	}
 }

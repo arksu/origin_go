@@ -36,6 +36,7 @@ var (
 	ErrObjectDestructionQueueFull      = errors.New("object destruction: queue is full")
 	ErrObjectDestructionStopped        = errors.New("object destruction: admission stopped")
 	ErrObjectDestructionPending        = errors.New("object destruction: already pending")
+	ErrInvalidTransientRemoval         = errors.New("object destruction: transient removal requires an inventory-free transient object")
 	ErrObjectDestructionCapture        = errors.New("object destruction: source changed during capture")
 	ErrObjectDestructionOverflow       = errors.New("object destruction: item count or identity overflow")
 	ErrObjectDestructionShutdown       = errors.New("object destruction: shutdown has pending operations")
@@ -256,6 +257,10 @@ func (s *ObjectDestructionService) TransformWithLoot(target types.Handle, destin
 // reserve retains a slot and source pin without changing gameplay state. All
 // reservations are committed or canceled before releasing the shard lock.
 func (s *ObjectDestructionService) reserve(target types.Handle) (objectDestructionReservation, error) {
+	// Runtime-only objects must never enter the durable replacement queue.
+	if info, ok := ecs.GetComponent[components.EntityInfo](s.world, target); ok && info.Transient {
+		return objectDestructionReservation{}, ErrInvalidTransientRemoval
+	}
 	if s.closed {
 		return objectDestructionReservation{}, ErrObjectDestructionStopped
 	}

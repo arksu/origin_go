@@ -242,7 +242,9 @@ func (f *ObjectFactory) SpawnWorldObjectFromSnapshot(
 	} else {
 		chunk.Spatial().AddDynamic(h, opts.X, opts.Y)
 	}
-	chunk.MarkRawDataDirty()
+	if info, ok := ecs.GetComponent[components.EntityInfo](w, h); ok && !info.Transient {
+		chunk.MarkRawDataDirty()
+	}
 
 	return h, nil
 }

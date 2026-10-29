@@ -47,6 +47,7 @@ func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawn
 			Behaviors:      def.CopyBehaviorOrder(),
 			IsStatic:       def.IsStatic,
 			Indestructible: def.Indestructible,
+			Transient:      def.Transient,
 			Quality:        params.Quality,
 			Region:         params.Region,
 			Layer:          params.Layer,
@@ -64,7 +65,7 @@ func SpawnEntityFromDef(w *ecs.World, def *objectdefs.ObjectDef, params DefSpawn
 		if def.Key == "player_dead" {
 			ecs.AddComponent(w, h, components.CorpseVisualState{})
 		}
-		state := components.ObjectInternalState{IsDirty: true}
+		state := components.ObjectInternalState{IsDirty: !def.Transient}
 		if def.Key != "player" {
 			state.HP = hp
 			state.HasHP = true

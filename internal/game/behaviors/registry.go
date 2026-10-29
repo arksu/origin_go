@@ -149,6 +149,7 @@ func DefaultRegistry() (*Registry, error) {
 			burnerBehavior{},
 			takeBehavior{},
 			wildWeedBehavior{},
+			npcAIBehavior{},
 			playerBehavior{},
 			playerDeadBehavior{},
 			playerSkeletonBehavior{},

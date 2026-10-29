@@ -10,6 +10,7 @@ type EntityInfo struct {
 	Behaviors      []string // behavior keys from object definitions
 	IsStatic       bool     // resolved from definition at spawn/transform
 	Indestructible bool     // runtime definition cache; never persisted
+	Transient      bool     // runtime-only object; excluded from persistence
 	Quality        uint32
 	Region         int
 	Layer          int

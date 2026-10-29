@@ -153,6 +153,7 @@ Maintain this list as you add new components:
 | 37 | ActionCooldownsComponentID      | Persisted per-action start and expiry timestamps              |
 | 38 | Reserved (retired ObjectHealth) | Object HP now lives in ObjectInternalState; no registered type |
 | 39 | CorpseVisualStateComponentID    | Runtime lying-pose revision retained after character death     |
+| 40 | NPCBrainComponentID            | Transient decision state shared by all NPC species/profiles    |
 
 `ActiveCyclicAction.ActionGeneration` links a timed menu-action cycle to its `ActiveGameAction.Generation`. Repeating menu actions retain that generation while incrementing `CycleIndex` and resetting elapsed ticks.
 Compare the supplied cycle with the current component and generation before completion, so a canceled or replaced cycle cannot apply a late effect. Other cyclic action sources may leave `ActionGeneration` at zero.
@@ -175,7 +176,7 @@ If you have existing code using auto-assigned IDs:
 
 ## Object Runtime State Helpers
 
-`ObjectInternalState` is the canonical runtime state container for non-player world objects.
+`ObjectInternalState` is the canonical persistent state container for non-player world objects. Transient NPC decisions use `NPCBrain`; do not duplicate them in its behavior map or add components per species/state/stimulus.
 
 - `State` must be a `*RuntimeObjectState` with sparse `Behaviors` map (string behavior key -> typed pointer state).
 - Behavior state keys are canonical string keys from object defs (`"tree"`, `"container"`, ...).

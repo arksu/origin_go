@@ -418,7 +418,7 @@ This pattern is mandatory for behavior-heavy worlds (e.g. thousands of container
 For long-lived behavior state updates (tree growth, machines, etc.), use the scheduler resources instead of scanning all entities.
 
 - `BehaviorTickSchedule` is the authoritative queue (`entity_id + behavior_key -> due_tick`) with heap-backed due ordering.
-- `ScheduleBehaviorTick(...)` replaces existing due tick for the same key; stale heap entries are ignored by sequence check.
+- `ScheduleBehaviorTick(...)` updates one indexed heap record per key in place. Cancellation physically removes queued records; recurring callbacks retain their registration through `CompleteTick` without allocating a new entry.
 - `CancelBehaviorTick(...)` and `CancelBehaviorTicksByEntityID(...)` must be used on terminal states/despawn.
 - `World.Despawn(...)` already calls `CancelBehaviorTicksByEntityID(...)`; keep this invariant intact.
 - `BehaviorTickPolicy` controls:

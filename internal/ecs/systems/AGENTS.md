@@ -28,6 +28,7 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 | 50       | CharacterSaveSystem   | Periodically saves character data to database                | Transform, Character               | Batch saves character positions/stats                    |
 | 100      | MovementSystem        | Updates entity movement based on Movement components         | Transform, Movement                | Appends to MovedEntities buffer                          |
 | 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef      | Reads from MovedEntities buffer                          |
+| 240      | NPCMovementGuard      | Bounds NPC movement by terrain, active chunks, home and time | NPCBrain, MovedEntities            | Feature-owned in game/behaviors; runs before Transform   |
 | 250      | ExpireDetachedSystem  | Handles delayed despawn of detached entities                 | Detached, Character                | Saves character data before despawn                      |
 | 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult         | Processes moved entities                                 |
 | 313      | BehaviorTickSystem    | Processes scheduled behavior ticks with global budget        | BehaviorTickSchedule, TimeState    | Runs before cyclic completion; delegates to behaviors    |
@@ -292,7 +293,7 @@ while a chunk activates, so an expired saved drop never becomes visible.
 **Safety/Performance**:
 
 - Replaces world-wide polling for "live" behavior objects.
-- Works with scheduler lazy dedupe (stale heap entries are ignored).
+- Uses the indexed scheduler: one physical record per key, in-place rearm, physical cancellation, and a shared bounded budget for all examined callbacks. Tick callback contexts are borrowed synchronously and cannot be retained.
 - Depends on `World.Despawn(...)` cancel-all cleanup for entity tick keys.
 
 ## Context Interaction Flow (RMB)

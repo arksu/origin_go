@@ -19,6 +19,8 @@ type BehaviorTickSystem struct {
 	budgetPerTick    int
 	processBatch     []ecs.BehaviorTickKey
 	executionDeps    *contracts.ExecutionDeps
+	// Callbacks borrow this context synchronously and must never retain it.
+	tickContext contracts.BehaviorTickContext
 }
 
 type BehaviorTickSystemConfig struct {
@@ -53,9 +55,12 @@ func (s *BehaviorTickSystem) Update(w *ecs.World, dt float64) {
 
 	timeState := ecs.GetResource[ecs.TimeState](w)
 	schedule := ecs.GetResource[ecs.BehaviorTickSchedule](w)
-	s.processBatch = schedule.PopDue(timeState.Tick, s.budgetPerTick, s.processBatch[:0])
+	s.processBatch = schedule.PopDueForExecution(timeState.Tick, s.budgetPerTick, s.processBatch[:0])
 	for _, tickKey := range s.processBatch {
-		s.processTickKey(w, timeState.Tick, tickKey)
+		if schedule.ShouldExecuteTick(tickKey) {
+			s.processTickKey(w, timeState.Tick, tickKey)
+		}
+		schedule.CompleteTick(tickKey)
 	}
 
 	// Tick deadlines retain precedence. Runtime work shares the same budget,
@@ -109,7 +114,7 @@ func (s *BehaviorTickSystem) processTickKey(w *ecs.World, currentTick uint64, ti
 		runtimeState, _ = components.GetRuntimeObjectState(internalState)
 	}
 
-	result, err := tickBehavior.OnScheduledTick(&contracts.BehaviorTickContext{
+	s.tickContext = contracts.BehaviorTickContext{
 		World:        w,
 		Handle:       handle,
 		EntityID:     tickKey.EntityID,
@@ -118,7 +123,9 @@ func (s *BehaviorTickSystem) processTickKey(w *ecs.World, currentTick uint64, ti
 		CurrentTick:  currentTick,
 		CurrentState: runtimeState,
 		Deps:         s.executionDeps,
-	})
+	}
+	result, err := tickBehavior.OnScheduledTick(&s.tickContext)
+	s.tickContext = contracts.BehaviorTickContext{}
 	if err != nil {
 		s.logger.Error("scheduled behavior tick failed",
 			zap.Uint64("entity_id", uint64(tickKey.EntityID)),

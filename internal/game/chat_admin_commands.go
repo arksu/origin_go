@@ -58,6 +58,7 @@ type ChatAdminCommandHandler struct {
 	teleportExecutor      AdminTeleportExecutor
 	timeExecutor          AdminTimeExecutor
 	objectDeleter         gameworld.ObjectDeleter
+	transientRemover      func(types.Handle) error
 	containerCloseSender  AdminContainerCloseSender
 	behaviorRegistry      contracts.BehaviorRegistry
 	eventBus              *eventbus.EventBus
@@ -125,6 +126,10 @@ func (h *ChatAdminCommandHandler) SetTimeExecutor(executor AdminTimeExecutor) {
 
 func (h *ChatAdminCommandHandler) SetObjectDeleter(deleter gameworld.ObjectDeleter) {
 	h.objectDeleter = deleter
+}
+
+func (h *ChatAdminCommandHandler) SetTransientObjectRemover(remove func(types.Handle) error) {
+	h.transientRemover = remove
 }
 
 func (h *ChatAdminCommandHandler) SetContainerCloseSender(sender AdminContainerCloseSender) {
@@ -525,8 +530,9 @@ func (h *ChatAdminCommandHandler) ExecutePendingSpawn(
 		})
 	}
 
-	// Mark chunk dirty for persistence
-	chunk.MarkRawDataDirty()
+	if !def.Transient {
+		chunk.MarkRawDataDirty()
+	}
 	ecs.MarkObjectBehaviorDirty(w, handle)
 
 	// Force vision update for all players so the object appears immediately
@@ -637,13 +643,25 @@ func (h *ChatAdminCommandHandler) ExecutePendingDestroy(w *ecs.World, playerID, 
 		h.sendSystemMessage(playerID, "Object destruction target is unavailable.")
 		return
 	}
-	if h.objectDeleter == nil {
+	info, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
+	if h.objectDeleter == nil && (!hasInfo || !info.Transient) {
 		h.sendSystemMessage(playerID, "Object destruction is unavailable.")
 		return
 	}
-	info, hasInfo := ecs.GetComponent[components.EntityInfo](w, targetHandle)
 	if !hasInfo || info.Region <= 0 {
 		h.sendSystemMessage(playerID, "Object destruction target is unavailable.")
+		return
+	}
+	if info.Transient {
+		if h.transientRemover == nil {
+			h.sendSystemMessage(playerID, "Object destruction is unavailable.")
+			return
+		}
+		if err := h.transientRemover(targetHandle); err != nil {
+			h.sendSystemMessage(playerID, "Object destruction failed.")
+			return
+		}
+		h.sendSystemMessage(playerID, fmt.Sprintf("Destroyed object %d.", targetID))
 		return
 	}
 	if err := h.objectDeleter.DeleteObject(info.Region, targetID); err != nil {

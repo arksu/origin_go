@@ -37,6 +37,7 @@
     "test:character-visual": "node scripts/test-character-visual.mjs",
     "test:asset-pipeline": "node scripts/test-asset-pipeline.mjs",
     "test:trees": "node scripts/test-character-visual.mjs tests/trees.test.ts",
+    "test:fox": "node scripts/test-character-visual.mjs tests/fox.test.ts",
     "test:culling": "node scripts/test-character-visual.mjs tests/culling.test.ts",
     "validate-objects": "node scripts/validate-object-schema.mjs",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",

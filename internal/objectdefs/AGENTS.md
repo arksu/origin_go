@@ -42,6 +42,7 @@ type ObjectDef struct {
     ContextMenuEvenForOneItem *bool // default true -> resolved runtime value
     HP                        int
     Indestructible            bool // default false; object damage immunity
+	Transient                 bool // default false; runtime-only chunk lifetime
     Components                *Components
     Resource                  string
     Appearance                []Appearance
@@ -144,6 +145,8 @@ The unified runtime registry (`internal/game/behaviors.DefaultRegistry()`) regis
 - `tree` — Tree behavior (chopping, wood resource)
 - `container` — Container behavior (storage)
 - `player` — Player behavior (character control)
+- `npc_ai` — Shared NPC decision behavior, initially `passive_wander`; parameters
+  are immutable def content and per-instance state lives in one transient NPCBrain.
 
 ## Integration Points
 

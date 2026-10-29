@@ -859,8 +859,8 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 		return nil, ErrEntityNotFound
 	}
 
-	// Skip players - they are saved via character table, not objects table
-	if info.TypeID == f.getPlayerTypeID() {
+	// Transient objects have no persistent snapshot; players use the character table.
+	if info.Transient || info.TypeID == f.getPlayerTypeID() {
 		return nil, nil
 	}
 
@@ -1179,6 +1179,9 @@ func serializePersistentObjectState(internalState components.ObjectInternalState
 // SerializeObjectInventories serializes root inventories owned by object entity.
 // Nested containers remain embedded in root JSON (current format).
 func (f *ObjectFactory) SerializeObjectInventories(w *ecs.World, h types.Handle) ([]repository.Inventory, error) {
+	if info, ok := ecs.GetComponent[components.EntityInfo](w, h); ok && info.Transient {
+		return nil, nil
+	}
 	externalID, ok := ecs.GetComponent[ecs.ExternalID](w, h)
 	if !ok {
 		return nil, ErrEntityNotFound

@@ -1,7 +1,6 @@
 package ecs
 
 import (
-	"container/heap"
 	"strings"
 
 	"origin/internal/types"
@@ -13,21 +12,18 @@ type BehaviorTickKey struct {
 }
 
 type behaviorTickState struct {
-	DueTick uint64
-	Seq     uint64
+	// A negative index retains registration while a due callback is in flight.
+	index int
 }
 
 type behaviorTickHeapItem struct {
 	Key     BehaviorTickKey
 	DueTick uint64
-	Seq     uint64
 }
 
 type behaviorTickMinHeap []behaviorTickHeapItem
 
-func (h behaviorTickMinHeap) Len() int { return len(h) }
-
-func (h behaviorTickMinHeap) Less(i, j int) bool {
+func (h behaviorTickMinHeap) less(i, j int) bool {
 	if h[i].DueTick == h[j].DueTick {
 		if h[i].Key.EntityID == h[j].Key.EntityID {
 			return h[i].Key.BehaviorKey < h[j].Key.BehaviorKey
@@ -37,34 +33,12 @@ func (h behaviorTickMinHeap) Less(i, j int) bool {
 	return h[i].DueTick < h[j].DueTick
 }
 
-func (h behaviorTickMinHeap) Swap(i, j int) {
-	h[i], h[j] = h[j], h[i]
-}
-
-func (h *behaviorTickMinHeap) Push(x any) {
-	item, ok := x.(behaviorTickHeapItem)
-	if !ok {
-		return
-	}
-	*h = append(*h, item)
-}
-
-func (h *behaviorTickMinHeap) Pop() any {
-	old := *h
-	n := len(old)
-	if n == 0 {
-		return nil
-	}
-	item := old[n-1]
-	*h = old[:n-1]
-	return item
-}
-
+// BehaviorTickSchedule owns one indexed heap entry per scheduled entity/behavior
+// pair. All access runs synchronously under the owning shard's lock.
 type BehaviorTickSchedule struct {
 	queue    behaviorTickMinHeap
 	latest   map[BehaviorTickKey]behaviorTickState
 	byEntity map[types.EntityID]map[string]struct{}
-	seq      uint64
 }
 
 func (s *BehaviorTickSchedule) Schedule(entityID types.EntityID, behaviorKey string, dueTick uint64) bool {
@@ -75,33 +49,37 @@ func (s *BehaviorTickSchedule) Schedule(entityID types.EntityID, behaviorKey str
 	if keyName == "" {
 		return false
 	}
-	if s.latest == nil {
-		s.latest = make(map[BehaviorTickKey]behaviorTickState, 256)
-	}
-	if s.byEntity == nil {
-		s.byEntity = make(map[types.EntityID]map[string]struct{}, 128)
-	}
-
-	s.seq++
 	key := BehaviorTickKey{
 		EntityID:    entityID,
 		BehaviorKey: keyName,
 	}
-	s.latest[key] = behaviorTickState{
-		DueTick: dueTick,
-		Seq:     s.seq,
+	current, registered := s.latest[key]
+	if registered && current.index >= 0 {
+		s.queue[current.index].DueTick = dueTick
+		s.fix(current.index)
+		return true
 	}
-	entityBehaviors, exists := s.byEntity[entityID]
-	if !exists {
-		entityBehaviors = make(map[string]struct{}, 2)
-		s.byEntity[entityID] = entityBehaviors
+	if !registered {
+		if s.latest == nil {
+			s.latest = make(map[BehaviorTickKey]behaviorTickState, 256)
+		}
+		if s.byEntity == nil {
+			s.byEntity = make(map[types.EntityID]map[string]struct{}, 128)
+		}
+		entityBehaviors, exists := s.byEntity[entityID]
+		if !exists {
+			entityBehaviors = make(map[string]struct{}, 2)
+			s.byEntity[entityID] = entityBehaviors
+		}
+		entityBehaviors[keyName] = struct{}{}
 	}
-	entityBehaviors[keyName] = struct{}{}
-	heap.Push(&s.queue, behaviorTickHeapItem{
+	index := len(s.queue)
+	s.queue = append(s.queue, behaviorTickHeapItem{
 		Key:     key,
 		DueTick: dueTick,
-		Seq:     s.seq,
 	})
+	s.latest[key] = behaviorTickState{index: index}
+	s.up(index)
 	return true
 }
 
@@ -117,12 +95,18 @@ func (s *BehaviorTickSchedule) Cancel(entityID types.EntityID, behaviorKey strin
 		EntityID:    entityID,
 		BehaviorKey: keyName,
 	}
-	if _, exists := s.latest[key]; !exists {
+	current, exists := s.latest[key]
+	if !exists {
 		return false
+	}
+	if current.index >= 0 {
+		s.removeQueued(current.index)
 	}
 	delete(s.latest, key)
 	s.removeEntityBehavior(entityID, keyName)
-	return true
+	// Popped callbacks are no longer pending, even while their registration is
+	// retained for rearm. Preserve cancellation's pending-work return value.
+	return current.index >= 0
 }
 
 func (s *BehaviorTickSchedule) CancelAll(entityID types.EntityID) int {
@@ -133,16 +117,9 @@ func (s *BehaviorTickSchedule) CancelAll(entityID types.EntityID) int {
 	if !exists || len(behaviorSet) == 0 {
 		return 0
 	}
-	delete(s.byEntity, entityID)
-
 	canceled := 0
 	for behaviorKey := range behaviorSet {
-		key := BehaviorTickKey{
-			EntityID:    entityID,
-			BehaviorKey: behaviorKey,
-		}
-		if _, has := s.latest[key]; has {
-			delete(s.latest, key)
+		if s.Cancel(entityID, behaviorKey) {
 			canceled++
 		}
 	}
@@ -150,8 +127,35 @@ func (s *BehaviorTickSchedule) CancelAll(entityID types.EntityID) int {
 }
 
 func (s *BehaviorTickSchedule) PopDue(nowTick uint64, max int, dst []BehaviorTickKey) []BehaviorTickKey {
+	return s.popDue(nowTick, max, dst, false)
+}
+
+// PopDueForExecution retains each due key's registration until CompleteTick.
+// The caller must complete every returned key after its synchronous callback,
+// including rejected or failed callbacks. Rearming during that callback reuses
+// registration without allocating; unrearmed one-shot keys are then released.
+func (s *BehaviorTickSchedule) PopDueForExecution(nowTick uint64, max int, dst []BehaviorTickKey) []BehaviorTickKey {
+	return s.popDue(nowTick, max, dst, true)
+}
+
+// CompleteTick releases a popped key unless it has since been rearmed.
+func (s *BehaviorTickSchedule) CompleteTick(key BehaviorTickKey) {
+	if current, exists := s.latest[key]; exists && current.index < 0 {
+		delete(s.latest, key)
+		s.removeEntityBehavior(key.EntityID, key.BehaviorKey)
+	}
+}
+
+// ShouldExecuteTick rechecks a pre-popped callback after earlier callbacks may
+// have canceled it or replaced its deadline. Examined keys still consume budget.
+func (s *BehaviorTickSchedule) ShouldExecuteTick(key BehaviorTickKey) bool {
+	current, exists := s.latest[key]
+	return exists && current.index < 0
+}
+
+func (s *BehaviorTickSchedule) popDue(nowTick uint64, max int, dst []BehaviorTickKey, retain bool) []BehaviorTickKey {
 	if max <= 0 {
-		max = len(s.latest)
+		max = len(s.queue)
 	}
 	if max <= 0 || len(s.queue) == 0 {
 		return dst
@@ -164,27 +168,76 @@ func (s *BehaviorTickSchedule) PopDue(nowTick uint64, max int, dst []BehaviorTic
 			break
 		}
 
-		popped := heap.Pop(&s.queue)
-		item, ok := popped.(behaviorTickHeapItem)
-		if !ok {
-			continue
+		s.removeQueued(0)
+		if !retain {
+			s.CompleteTick(next.Key)
 		}
-
-		current, exists := s.latest[item.Key]
-		if !exists || current.Seq != item.Seq {
-			continue
-		}
-
-		delete(s.latest, item.Key)
-		s.removeEntityBehavior(item.Key.EntityID, item.Key.BehaviorKey)
-		dst = append(dst, item.Key)
+		dst = append(dst, next.Key)
 		drained++
 	}
 	return dst
 }
 
 func (s *BehaviorTickSchedule) PendingCount() int {
-	return len(s.latest)
+	return len(s.queue)
+}
+
+// removeQueued physically removes a deadline but keeps its registration for a
+// callback to reuse. The caller either rearms it or releases it with CompleteTick.
+func (s *BehaviorTickSchedule) removeQueued(index int) {
+	removed := s.queue[index]
+	last := len(s.queue) - 1
+	if index != last {
+		s.swap(index, last)
+	}
+	s.queue[last] = behaviorTickHeapItem{}
+	s.queue = s.queue[:last]
+	s.latest[removed.Key] = behaviorTickState{index: -1}
+	if index < last {
+		s.fix(index)
+	}
+}
+
+func (s *BehaviorTickSchedule) fix(index int) {
+	if index > 0 && s.queue.less(index, (index-1)/2) {
+		s.up(index)
+		return
+	}
+	s.down(index)
+}
+
+func (s *BehaviorTickSchedule) up(index int) {
+	for index > 0 {
+		parent := (index - 1) / 2
+		if !s.queue.less(index, parent) {
+			return
+		}
+		s.swap(index, parent)
+		index = parent
+	}
+}
+
+func (s *BehaviorTickSchedule) down(index int) {
+	for {
+		child := index*2 + 1
+		if child >= len(s.queue) {
+			return
+		}
+		if right := child + 1; right < len(s.queue) && s.queue.less(right, child) {
+			child = right
+		}
+		if !s.queue.less(child, index) {
+			return
+		}
+		s.swap(index, child)
+		index = child
+	}
+}
+
+func (s *BehaviorTickSchedule) swap(i, j int) {
+	s.queue[i], s.queue[j] = s.queue[j], s.queue[i]
+	s.latest[s.queue[i].Key] = behaviorTickState{index: i}
+	s.latest[s.queue[j].Key] = behaviorTickState{index: j}
 }
 
 func (s *BehaviorTickSchedule) removeEntityBehavior(entityID types.EntityID, behaviorKey string) {

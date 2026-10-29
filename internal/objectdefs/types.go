@@ -11,6 +11,7 @@ type ObjectDef struct {
 	ContextMenuEvenForOneItem *bool                      `json:"contextMenuEvenForOneItem,omitempty"`
 	HP                        int                        `json:"hp,omitempty"`
 	Indestructible            bool                       `json:"indestructible,omitempty"`
+	Transient                 bool                       `json:"transient,omitempty"`
 	Components                *Components                `json:"components,omitempty"`
 	Resource                  string                     `json:"resource,omitempty"`
 	Appearance                []Appearance               `json:"appearance,omitempty"`
@@ -28,6 +29,7 @@ type ObjectDef struct {
 	DryingConfig                   *DryingBehaviorConfig   `json:"-"`
 	LiftConfig                     *LiftBehaviorConfig     `json:"-"`
 	WildWeedConfig                 *WildWeedBehaviorConfig `json:"-"`
+	NPCConfig                      *NPCBehaviorConfig      `json:"-"`
 }
 
 // Components describes ECS components to attach when loading the object.

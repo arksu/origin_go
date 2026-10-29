@@ -46,16 +46,191 @@ func (r *testBehaviorTickRegistry) InitObjectBehaviors(_ *contracts.BehaviorObje
 }
 
 type testScheduledTickBehavior struct {
-	calls int
+	calls  int
+	onTick func(*contracts.BehaviorTickContext) (contracts.BehaviorTickResult, error)
 }
 
 func (b *testScheduledTickBehavior) Key() string {
 	return "grow"
 }
 
-func (b *testScheduledTickBehavior) OnScheduledTick(_ *contracts.BehaviorTickContext) (contracts.BehaviorTickResult, error) {
+func (b *testScheduledTickBehavior) OnScheduledTick(ctx *contracts.BehaviorTickContext) (contracts.BehaviorTickResult, error) {
 	b.calls++
+	if b.onTick != nil {
+		return b.onTick(ctx)
+	}
 	return contracts.BehaviorTickResult{StateChanged: true}, nil
+}
+
+func TestBehaviorTickSystem_RechecksCanceledOrReplacedBatchEntries(t *testing.T) {
+	for _, replace := range []bool{false, true} {
+		t.Run(fmt.Sprintf("replace_%t", replace), func(t *testing.T) {
+			w := ecs.NewWorldForTesting()
+			for id := types.EntityID(1); id <= 3; id++ {
+				w.Spawn(id, func(w *ecs.World, h types.Handle) {
+					ecs.AddComponent(w, h, components.EntityInfo{Behaviors: []string{"grow"}})
+				})
+				ecs.ScheduleBehaviorTick(w, id, "grow", 1)
+			}
+			var called []types.EntityID
+			behavior := &testScheduledTickBehavior{onTick: func(ctx *contracts.BehaviorTickContext) (contracts.BehaviorTickResult, error) {
+				called = append(called, ctx.EntityID)
+				if ctx.EntityID == 1 {
+					if replace {
+						ecs.ScheduleBehaviorTick(w, 2, "grow", 20)
+					} else {
+						ecs.CancelBehaviorTick(w, 2, "grow")
+					}
+				}
+				return contracts.BehaviorTickResult{}, nil
+			}}
+			system := NewBehaviorTickSystem(nil, BehaviorTickSystemConfig{BudgetPerTick: 2, BehaviorRegistry: &testBehaviorTickRegistry{byKey: map[string]contracts.Behavior{"grow": behavior}}})
+			ecs.GetResource[ecs.TimeState](w).Tick = 1
+			system.Update(w, 0)
+			if fmt.Sprint(called) != "[1]" {
+				t.Fatalf("canceled/replaced callback executed: %v", called)
+			}
+			system.Update(w, 0)
+			if fmt.Sprint(called) != "[1 3]" {
+				t.Fatalf("canceled entry did not spend batch budget: %v", called)
+			}
+			ecs.GetResource[ecs.TimeState](w).Tick = 20
+			system.Update(w, 0)
+			want := "[1 3]"
+			if replace {
+				want = "[1 3 2]"
+			}
+			if fmt.Sprint(called) != want {
+				t.Fatalf("replacement deadline lost: got%v, want%s", called, want)
+			}
+			if ecs.GetResource[ecs.BehaviorTickSchedule](w).PendingCount() != 0 {
+				t.Fatal("one-shot registration retained")
+			}
+		})
+	}
+}
+
+func TestBehaviorTickSystem_RecurringCallbackDoesNotAllocate(t *testing.T) {
+	for _, population := range []int{1, 200} {
+		t.Run(fmt.Sprintf("population_%d", population), func(t *testing.T) {
+			w := ecs.NewWorldForTesting()
+			for entityID := types.EntityID(1); entityID <= types.EntityID(population); entityID++ {
+				w.Spawn(entityID, func(w *ecs.World, h types.Handle) {
+					ecs.AddComponent(w, h, components.EntityInfo{Behaviors: []string{"grow"}})
+				})
+				ecs.ScheduleBehaviorTick(w, entityID, "grow", 1)
+			}
+			behavior := &testScheduledTickBehavior{onTick: func(ctx *contracts.BehaviorTickContext) (contracts.BehaviorTickResult, error) {
+				ecs.ScheduleBehaviorTick(ctx.World, ctx.EntityID, ctx.BehaviorKey, ctx.CurrentTick+1)
+				return contracts.BehaviorTickResult{}, nil
+			}}
+			system := NewBehaviorTickSystem(nil, BehaviorTickSystemConfig{
+				BudgetPerTick:    population,
+				BehaviorRegistry: &testBehaviorTickRegistry{byKey: map[string]contracts.Behavior{"grow": behavior}},
+			})
+			timeState := ecs.GetResource[ecs.TimeState](w)
+			allocs := testing.AllocsPerRun(1000, func() {
+				timeState.Tick++
+				system.Update(w, 0)
+			})
+			if allocs != 0 {
+				t.Fatalf("due callback and rearm allocated after warmup: %g allocs/run", allocs)
+			}
+			if behavior.calls != 1001*population || ecs.GetResource[ecs.BehaviorTickSchedule](w).PendingCount() != population {
+				t.Fatalf("measurement did not repeatedly execute and rearm: calls=%d", behavior.calls)
+			}
+		})
+	}
+}
+
+func TestBehaviorTickSystem_RearmWaitsUntilNextUpdate(t *testing.T) {
+	w := ecs.NewWorldForTesting()
+	w.Spawn(1, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.EntityInfo{Behaviors: []string{"grow"}})
+	})
+	behavior := &testScheduledTickBehavior{onTick: func(ctx *contracts.BehaviorTickContext) (contracts.BehaviorTickResult, error) {
+		ecs.ScheduleBehaviorTick(ctx.World, ctx.EntityID, ctx.BehaviorKey, ctx.CurrentTick)
+		return contracts.BehaviorTickResult{}, nil
+	}}
+	system := NewBehaviorTickSystem(nil, BehaviorTickSystemConfig{
+		BudgetPerTick:    8,
+		BehaviorRegistry: &testBehaviorTickRegistry{byKey: map[string]contracts.Behavior{"grow": behavior}},
+	})
+	ecs.ScheduleBehaviorTick(w, 1, "grow", 0)
+	for update := 1; update <= 3; update++ {
+		system.Update(w, 0)
+		if behavior.calls != update || ecs.GetResource[ecs.BehaviorTickSchedule](w).PendingCount() != 1 {
+			t.Fatalf("immediate tick rearm changed batch semantics: calls=%d update=%d", behavior.calls, update)
+		}
+	}
+}
+
+func TestBehaviorTickSystem_TickContextAndErrorContinue(t *testing.T) {
+	w := ecs.NewWorldForTesting()
+	state := &components.RuntimeObjectState{Behaviors: map[string]any{"grow": "test-state"}}
+	deps := &contracts.ExecutionDeps{}
+	var contexts []contracts.BehaviorTickContext
+	behavior := &testScheduledTickBehavior{onTick: func(ctx *contracts.BehaviorTickContext) (contracts.BehaviorTickResult, error) {
+		contexts = append(contexts, *ctx)
+		if ctx.EntityID == 1 {
+			return contracts.BehaviorTickResult{}, fmt.Errorf("test failure")
+		}
+		return contracts.BehaviorTickResult{}, nil
+	}}
+	system := NewBehaviorTickSystem(nil, BehaviorTickSystemConfig{
+		BudgetPerTick:    8,
+		BehaviorRegistry: &testBehaviorTickRegistry{byKey: map[string]contracts.Behavior{"grow": behavior}},
+		ExecutionDeps:    deps,
+	})
+	var handles [2]types.Handle
+	for entityID := types.EntityID(1); entityID <= 2; entityID++ {
+		handles[entityID-1] = w.Spawn(entityID, func(w *ecs.World, h types.Handle) {
+			ecs.AddComponent(w, h, components.EntityInfo{TypeID: 77, Behaviors: []string{"grow"}})
+			ecs.AddComponent(w, h, components.ObjectInternalState{State: state})
+		})
+		ecs.ScheduleBehaviorTick(w, entityID, "grow", 10)
+	}
+	ecs.GetResource[ecs.TimeState](w).Tick = 10
+	system.Update(w, 0)
+	if len(contexts) != 2 {
+		t.Fatalf("error stopped the remaining callback: got %d calls", len(contexts))
+	}
+	for i, ctx := range contexts {
+		if ctx.World != w || ctx.Handle != handles[i] || ctx.EntityID != types.EntityID(i+1) || ctx.EntityType != 77 || ctx.BehaviorKey != "grow" || ctx.CurrentTick != 10 || ctx.CurrentState != state || ctx.Deps != deps {
+			t.Fatalf("incorrect tick callback context: %+v", ctx)
+		}
+	}
+	if system.tickContext != (contracts.BehaviorTickContext{}) {
+		t.Fatal("borrowed context retained callback references")
+	}
+	if ecs.GetResource[ecs.BehaviorTickSchedule](w).PendingCount() != 0 {
+		t.Fatal("one-shot callbacks left pending deadlines")
+	}
+}
+
+func TestBehaviorTickSystem_InvalidTickEntriesSpendBudget(t *testing.T) {
+	w := ecs.NewWorldForTesting()
+	behavior := &testRuntimeScheduledBehavior{}
+	system := newRuntimeScheduledTestSystem(behavior, 2, nil)
+	for entityID := types.EntityID(1); entityID <= 3; entityID++ {
+		handle := spawnRuntimeScheduledTestObject(w, entityID)
+		if entityID < 3 {
+			ecs.RemoveComponent[components.EntityInfo](w, handle)
+		}
+		ecs.ScheduleBehaviorTick(w, entityID, "scheduled", 1)
+		if entityID == 3 {
+			ecs.ScheduleBehaviorRuntime(w, handle, entityID, "scheduled", 0)
+		}
+	}
+	ecs.GetResource[ecs.TimeState](w).Tick = 1
+	system.Update(w, 0)
+	if len(behavior.calls) != 0 || ecs.GetResource[ecs.BehaviorTickSchedule](w).PendingCount() != 1 || ecs.GetResource[ecs.BehaviorRuntimeSchedule](w).PendingCount() != 1 {
+		t.Fatal("invalid tick entries bypassed the shared work budget")
+	}
+	system.Update(w, 0)
+	if fmt.Sprint(behavior.calls) != fmt.Sprint([]string{"tick:3", "runtime:3"}) {
+		t.Fatalf("deferred tick and runtime work lost ordering: %v", behavior.calls)
+	}
 }
 
 func TestBehaviorTickSystem_MarksDirtyOnStateChange(t *testing.T) {

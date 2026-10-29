@@ -651,6 +651,9 @@ func (c *Chunk) IsDirty(world *ecs.World) bool {
 		if !world.Alive(h) {
 			continue
 		}
+		if info, ok := ecs.GetComponent[components.EntityInfo](world, h); ok && info.Transient {
+			continue
+		}
 		state, ok := ecs.GetComponent[components.ObjectInternalState](world, h)
 		if ok && state.IsDirty {
 			return true
@@ -793,6 +796,11 @@ func (c *Chunk) SaveToDB(db *persistence.Postgres, world *ecs.World, objectFacto
 		if !ok {
 			logger.Error("cannot save object without entity info", zap.Uint64("object_id", uint64(extID.ID)))
 			saveErr = errors.Join(saveErr, fmt.Errorf("object handle %v has no entity info", h))
+			continue
+		}
+		// Unlike an empty build site, a transient object has never owned a DB
+		// row. Skip before Serialize's nil result can create a delete request.
+		if info.Transient {
 			continue
 		}
 
