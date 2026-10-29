@@ -42,6 +42,163 @@ func TestBehaviorTickSchedule_RescheduleAndDueDrain(t *testing.T) {
 	}
 }
 
+func TestWakeBehaviorTick_ValidatesAndNormalizesKey(t *testing.T) {
+	w := NewWorldForTesting()
+	if WakeBehaviorTick(nil, 1, "npc", 1) || WakeBehaviorTick(w, 0, "npc", 1) || WakeBehaviorTick(w, 1, " \t", 1) {
+		t.Fatal("wake accepted an invalid world or key")
+	}
+	if !WakeBehaviorTick(w, 1, " npc ", 4) || !WakeBehaviorTick(w, 1, "npc", 3) {
+		t.Fatal("wake rejected a valid key")
+	}
+	schedule := GetResource[BehaviorTickSchedule](w)
+	if schedule.PendingCount() != 1 {
+		t.Fatalf("normalized key retained duplicate entries: %d", schedule.PendingCount())
+	}
+	if got := schedule.PopDue(3, 1, nil); len(got) != 1 || got[0] != (BehaviorTickKey{1, "npc"}) {
+		t.Fatalf("normalized wake did not execute: %v", got)
+	}
+	assertBehaviorTickScheduleEmpty(t, schedule)
+}
+
+func TestBehaviorTickSchedule_WakeAdvancesDeadline(t *testing.T) {
+	schedule := &BehaviorTickSchedule{}
+	schedule.Schedule(1, "npc", 20)
+	schedule.Schedule(2, "npc", 10)
+	schedule.Wake(1, "npc", 5)
+	if schedule.PendingCount() != 2 {
+		t.Fatalf("wake created duplicate work: %d", schedule.PendingCount())
+	}
+	if got := schedule.PopDue(4, 1, nil); len(got) != 0 {
+		t.Fatalf("wake executed before its deadline: %v", got)
+	}
+	if got := schedule.PopDue(5, 1, nil); len(got) != 1 || got[0].EntityID != 1 {
+		t.Fatalf("earlier wake did not move ahead of the heap root: %v", got)
+	}
+	if got := schedule.PopDue(10, 1, nil); len(got) != 1 || got[0].EntityID != 2 {
+		t.Fatalf("wake changed another key's deadline: %v", got)
+	}
+	assertBehaviorTickScheduleEmpty(t, schedule)
+}
+
+func TestBehaviorTickSchedule_WakePreservesOverdueOrder(t *testing.T) {
+	schedule := &BehaviorTickSchedule{}
+	schedule.Schedule(9, "npc", 2)
+	schedule.Schedule(1, "npc", 3)
+	for tick := uint64(2); tick < 100; tick++ {
+		schedule.Wake(9, "npc", tick)
+	}
+	if schedule.PendingCount() != 2 {
+		t.Fatalf("repeated wakes retained duplicate entries: %d", schedule.PendingCount())
+	}
+	if got := schedule.PopDue(100, 1, nil); len(got) != 1 || got[0].EntityID != 9 {
+		t.Fatalf("repeated wakes postponed overdue work behind another entity: %v", got)
+	}
+	if got := schedule.PopDue(100, 1, nil); len(got) != 1 || got[0].EntityID != 1 {
+		t.Fatalf("budgeted wake drain lost remaining work: %v", got)
+	}
+	assertBehaviorTickScheduleEmpty(t, schedule)
+}
+
+func TestBehaviorTickSchedule_WakePreservesPrePoppedCallback(t *testing.T) {
+	schedule := &BehaviorTickSchedule{}
+	schedule.Schedule(1, "npc", 1)
+	schedule.Schedule(2, "npc", 1)
+	batch := schedule.PopDueForExecution(10, 2, nil)
+	if len(batch) != 2 || !schedule.ShouldExecuteTick(batch[0]) {
+		t.Fatalf("expected two ready callbacks: %v", batch)
+	}
+	// The first callback wakes the second after the entire batch was popped.
+	for _, dueTick := range []uint64{0, 10, 20} {
+		schedule.Wake(2, "npc", dueTick)
+	}
+	schedule.CompleteTick(batch[0])
+	if schedule.PendingCount() != 0 || !schedule.ShouldExecuteTick(batch[1]) {
+		t.Fatal("wake requeued or suppressed an already ready callback")
+	}
+	if schedule.ShouldExecuteTick(batch[1]) {
+		t.Fatal("callback could be claimed twice")
+	}
+	schedule.CompleteTick(batch[1])
+	assertBehaviorTickScheduleEmpty(t, schedule)
+}
+
+func TestBehaviorTickSchedule_WakeDuringCallbackRearmsOnce(t *testing.T) {
+	schedule := &BehaviorTickSchedule{}
+	schedule.Wake(1, "npc", 5)
+	batch := make([]BehaviorTickKey, 0, 2)
+	for execution := 0; execution < 3; execution++ {
+		batch = schedule.PopDueForExecution(5, 2, batch[:0])
+		if len(batch) != 1 || !schedule.ShouldExecuteTick(batch[0]) {
+			t.Fatalf("wake lost or duplicated callback %d: %v", execution, batch)
+		}
+		schedule.Wake(1, "npc", 8)
+		schedule.Wake(1, "npc", 5)
+		schedule.Wake(1, "npc", 6)
+		schedule.CompleteTick(batch[0])
+		if schedule.PendingCount() != 1 || len(schedule.latest) != 1 {
+			t.Fatal("completion lost or duplicated a callback wake")
+		}
+	}
+	schedule.Cancel(1, "npc")
+	assertBehaviorTickScheduleEmpty(t, schedule)
+}
+
+func TestBehaviorTickSchedule_WakeCancellationAndRecreation(t *testing.T) {
+	for _, execute := range []bool{false, true} {
+		schedule := &BehaviorTickSchedule{}
+		schedule.Wake(1, "npc", 1)
+		batch := schedule.PopDueForExecution(1, 1, nil)
+		if execute && !schedule.ShouldExecuteTick(batch[0]) {
+			t.Fatal("callback could not start")
+		}
+		if schedule.Cancel(1, "npc") {
+			t.Fatal("cancel counted a popped callback as queued work")
+		}
+		if schedule.ShouldExecuteTick(batch[0]) {
+			t.Fatal("canceled callback remained ready")
+		}
+		assertBehaviorTickScheduleEmpty(t, schedule)
+		schedule.Wake(1, "npc", 3)
+		schedule.CompleteTick(batch[0])
+		if schedule.PendingCount() != 1 {
+			t.Fatal("old callback completion removed a newly woken key")
+		}
+		if !schedule.Cancel(1, "npc") {
+			t.Fatal("cancel failed to remove the new wake")
+		}
+		assertBehaviorTickScheduleEmpty(t, schedule)
+	}
+}
+
+func TestBehaviorTickSchedule_RecurringWakeDoesNotAllocate(t *testing.T) {
+	const population = 200
+	schedule := &BehaviorTickSchedule{}
+	for entityID := types.EntityID(1); entityID <= population; entityID++ {
+		schedule.Wake(entityID, "npc", 0)
+	}
+	batch := make([]BehaviorTickKey, 0, population)
+	var tick uint64
+	calls := 0
+	allocs := testing.AllocsPerRun(1000, func() {
+		batch = schedule.PopDueForExecution(tick, population, batch[:0])
+		for _, key := range batch {
+			if schedule.ShouldExecuteTick(key) {
+				calls++
+				schedule.Wake(key.EntityID, key.BehaviorKey, tick+1)
+				schedule.Wake(key.EntityID, key.BehaviorKey, tick+2)
+			}
+			schedule.CompleteTick(key)
+		}
+		tick++
+	})
+	if allocs != 0 {
+		t.Fatalf("recurring wakes allocated after warmup: %g allocs/run", allocs)
+	}
+	if calls != 1001*population || schedule.PendingCount() != population {
+		t.Fatalf("measurement did not retain recurring work: calls=%d pending=%d", calls, schedule.PendingCount())
+	}
+}
+
 func TestBehaviorTickSchedule_CancelAndCancelAll(t *testing.T) {
 	schedule := &BehaviorTickSchedule{}
 	_ = schedule.Schedule(types.EntityID(1), "tree", 10)
@@ -193,12 +350,21 @@ func TestBehaviorTickSchedule_DespawnReleasesQueuedAndInFlightKeys(t *testing.T)
 	w := NewWorldForTesting()
 	handle := w.Spawn(1, nil)
 	schedule := GetResource[BehaviorTickSchedule](w)
-	schedule.Schedule(1, "tree", 1)
-	schedule.Schedule(1, "machine", 2)
-	due := schedule.PopDueForExecution(1, 1, nil)
+	schedule.Wake(1, "tree", 1)
+	schedule.Wake(1, "machine", 2)
+	schedule.Wake(1, "npc", 1)
+	due := schedule.PopDueForExecution(1, 2, nil)
+	if len(due) != 2 || !schedule.ShouldExecuteTick(due[0]) {
+		t.Fatalf("expected ready and executing callbacks: %v", due)
+	}
 	w.Despawn(handle)
 	assertBehaviorTickScheduleEmpty(t, schedule)
-	schedule.CompleteTick(due[0])
+	for _, key := range due {
+		if schedule.ShouldExecuteTick(key) {
+			t.Fatal("despawned entity's callback remained ready")
+		}
+		schedule.CompleteTick(key)
+	}
 	assertBehaviorTickScheduleEmpty(t, schedule)
 }
 

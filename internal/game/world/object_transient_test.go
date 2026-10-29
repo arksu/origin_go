@@ -9,6 +9,7 @@ import (
 	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/behaviors/contracts"
 	"origin/internal/objectdefs"
 	"origin/internal/persistence"
 	"origin/internal/persistence/repository"
@@ -17,6 +18,40 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
+
+type npcTransformRetirementProbe func(types.Handle, contracts.NPCRetireReason)
+
+func (probe npcTransformRetirementProbe) Retire(h types.Handle, reason contracts.NPCRetireReason) {
+	probe(h, reason)
+}
+
+func TestNPCTransformRetiresOldExecutionBeforeDefinitionMutation(t *testing.T) {
+	for _, toNPC := range []bool{false, true} {
+		t.Run(map[bool]string{false: "object", true: "another_npc"}[toNPC], func(t *testing.T) {
+			w := ecs.NewWorldForTesting()
+			def := objectdefs.ObjectDef{DefID: 9149, Key: "source", HP: 110, Transient: true, NPCConfig: &objectdefs.NPCBehaviorConfig{}}
+			h := SpawnEntityFromDef(w, &def, DefSpawnParams{EntityID: 1})
+			ecs.AddComponent(w, h, components.NPCBrain{})
+			calls := 0
+			ecs.InitResource(w, contracts.NPCLifecycle{Controller: npcTransformRetirementProbe(func(target types.Handle, reason contracts.NPCRetireReason) {
+				calls++
+				require.Equal(t, h, target)
+				require.Equal(t, contracts.NPCRetireTransform, reason)
+				info, _ := ecs.GetComponent[components.EntityInfo](w, target)
+				require.Equal(t, uint32(def.DefID), info.TypeID, "the old execution must still see its definition")
+				require.True(t, ecs.HasComponent[components.NPCBrain](w, target))
+			})})
+			require.True(t, TransformObjectToDefInPlace(w, 1, h, &def, TransformObjectInPlaceOptions{}))
+			require.Zero(t, calls, "same-definition refresh preserves execution")
+			next := objectdefs.ObjectDef{DefID: 9150, Key: "next", HP: 100, Transient: true}
+			if toNPC {
+				next.NPCConfig = &objectdefs.NPCBehaviorConfig{}
+			}
+			require.True(t, TransformObjectToDefInPlace(w, 1, h, &next, TransformObjectInPlaceOptions{}))
+			require.Equal(t, 1, calls)
+		})
+	}
+}
 
 func TestTransientDefinitionDefaultsAndRuntimeCache(t *testing.T) {
 	var def objectdefs.ObjectDef

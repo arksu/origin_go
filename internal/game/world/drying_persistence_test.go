@@ -43,6 +43,11 @@ func dryingPersistenceRegistry(t *testing.T) *behaviors.Registry {
 	registry := behaviors.MustDefaultRegistry()
 	objects, err := objectdefs.LoadFromDirectory("../../../data/objects", registry, zap.NewNop())
 	require.NoError(t, err)
+	frame, found := objects.GetByKey("drying_frame")
+	require.True(t, found)
+	require.Len(t, frame.DryingConfig.Processes, 1)
+	// Keep save/reload checkpoints independent of live balance tuning in this fresh test catalog.
+	frame.DryingConfig.Processes[0].DurationSeconds = 16 * 60 * 60
 	objectdefs.SetGlobalForTesting(objects)
 	return registry
 }

@@ -142,6 +142,10 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		logger.Fatal("Invalid world sound configuration", zap.Error(soundErr))
 	}
 	s.chunkManager = world.NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, behaviorRegistry, eb, logger)
+	npcController, npcErr := behaviors.AttachNPCController(s.world, behaviors.NPCControllerConfig{Chunks: s.chunkManager})
+	if npcErr != nil {
+		logger.Fatal("Invalid NPC controller configuration", zap.Error(npcErr))
+	}
 	if layer == hearth.SurfaceLayer && db != nil {
 		var spotErr error
 		s.spotManager, spotErr = world.NewSpotManager(context.Background(), cfg, world.NewSpotStoreDB(db), s.chunkManager.SubmitPersistenceJob, logger)
@@ -362,7 +366,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	collisionSystem := systems.NewCollisionSystem(s.world, s.chunkManager, logger, worldMinX, worldMaxX, worldMinY, worldMaxY, cfg.Game.WorldMarginTiles)
 	collisionSystem.SetObjectCollisionFilter(s.objectCollisionFilter)
 	s.world.AddSystem(collisionSystem)
-	s.world.AddSystem(behaviors.NewNPCMovementGuard(s.world, s.chunkManager))
+	s.world.AddSystem(behaviors.NewNPCMovementGuard(npcController))
 	s.world.AddSystem(systems.NewBuildPlacementSystem(s.world, buildService, logger))
 	s.world.AddSystem(systems.NewLiftPlacementSystem(s.world, liftService, logger))
 	transformSystem := systems.NewTransformUpdateSystem(s.world, s.chunkManager, s.eventBus, logger)

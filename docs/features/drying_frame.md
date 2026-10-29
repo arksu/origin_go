@@ -8,7 +8,7 @@ an existing station, the build-site flow and the ordinary container window. Its
 
 - Object key: `drying_frame`; display name: `Drying Frame`.
 - Build: one `branch`, 20 ticks, 8 stamina, no skill or discovery requirements.
-- Root inventory: grid key 0, 2×2; collider: 24×8 world coordinates.
+- Root inventory: grid key 0, 2×2; collider: 8×20 world coordinates.
 - Top-level station metadata: `capabilities: ["drying"]`, `states: ["ready"]`,
   `initialState: "ready"`. Ready means available after construction, independently
   of item completion.
@@ -33,8 +33,8 @@ If recipes share an output type, their visual categories must agree, including
 omitted categories. For appearance, a type that is also a recipe input uses
 that input recipe's category and input role before considering output roles.
 
-The live recipe consumes one `wild_windsown_weed` after **57,600 runtime seconds
-(16 hours)** and produces exactly one of `seed_wheat`, `seed_carrot`, `seed_beet`,
+The live recipe consumes one `wild_windsown_weed` after **120 runtime seconds
+(2 minutes)** and produces exactly one of `seed_wheat`, `seed_carrot`, `seed_beet`,
 or `seed_potato`, each with probability 1/4. The seed pool belongs to this drying
 recipe; the plant behavior has no `seedOutcomes` configuration. The result is
 selected only when drying completes. Neither the plant nor the harvested WWW

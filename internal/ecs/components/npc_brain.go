@@ -1,6 +1,9 @@
 package components
 
-import "origin/internal/ecs"
+import (
+	"origin/internal/ecs"
+	"origin/internal/types"
+)
 
 type NPCActivity uint8
 
@@ -9,14 +12,85 @@ const (
 	NPCWander
 )
 
-// NPCBrain is transient, per-entity decision state shared by all NPC profiles.
-// Position, velocity and the current movement target belong to Movement/Transform.
-// Species parameters belong to immutable object definitions, not ECS components.
-type NPCBrain struct {
-	Activity     NPCActivity
-	HomeX, HomeY float64
+type NPCExecutionStatus uint8
+
+const (
+	NPCExecutionNone NPCExecutionStatus = iota
+	NPCExecutionAccepted
+	NPCExecutionBlocked
+	NPCExecutionCompleted
+	NPCExecutionTimeout
+	NPCExecutionBusy
+	NPCExecutionRejected
+	NPCExecutionCanceled
+)
+
+type NPCMovementOwner uint8
+
+const (
+	NPCMovementUnowned NPCMovementOwner = iota
+	NPCMovementAI
+	NPCMovementAbility
+)
+
+// NPCEntityRef protects both recycled handles and persistent identity boundaries.
+type NPCEntityRef struct {
+	Handle   types.Handle
+	EntityID types.EntityID
+}
+type NPCPoint struct{ X, Y float64 }
+type NPCTargetKind uint8
+
+const (
+	NPCTargetNone NPCTargetKind = iota
+	NPCTargetEntity
+	NPCTargetPoint
+	NPCTargetDirection
+)
+
+type NPCTarget struct {
+	Kind      NPCTargetKind
+	Entity    NPCEntityRef
+	Point     NPCPoint
+	Direction NPCPoint
+}
+
+// NPCPolicyState is the bounded memory a pure decision policy may update.
+type NPCPolicyState struct {
+	Activity    NPCActivity
+	RandomState uint64
+	Step        uint32
+}
+
+// NPCMovementLease describes the current task's movement rules. A zero home radius
+// permits movement away from home; terrain and active-chunk checks always apply.
+type NPCMovementLease struct {
+	// Target is the identity dependency of this accepted route, independent of
+	// the remembered target that later stimuli may replace.
+	Target       NPCEntityRef
+	Owner        NPCMovementOwner
+	Generation   uint64
 	DeadlineTick uint64
-	RandomState  uint64
+	HomeRadius   float64
+}
+type NPCAbilityRef struct {
+	ID         string
+	Generation uint64
+	Target     NPCTarget
+}
+
+// NPCBrain is transient and uses the same component ID for every NPC profile.
+// Ability phases/cooldowns belong to the executor, never this component.
+type NPCBrain struct {
+	NPCPolicyState
+	HomeX, HomeY         float64
+	NextDecisionTick     uint64
+	ActivityDeadlineTick uint64
+	// Target is remembered perception state, changed only by controller stimuli.
+	Target        NPCEntityRef
+	MovementLease NPCMovementLease
+	Ability       NPCAbilityRef
+	LastResult    NPCExecutionStatus
 }
 
 const NPCBrainComponentID ecs.ComponentID = 40

@@ -9,12 +9,19 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/behaviors/contracts"
 	gameworld "origin/internal/game/world"
 	"origin/internal/types"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
+
+type npcQuarantineRetirementProbe func(types.Handle, contracts.NPCRetireReason)
+
+func (probe npcQuarantineRetirementProbe) Retire(h types.Handle, reason contracts.NPCRetireReason) {
+	probe(h, reason)
+}
 
 func TestTransientDamageDoesNotReservePersistenceAndFinalizesAfterCommit(t *testing.T) {
 	f := newDestructionServiceFixture(t)
@@ -166,6 +173,14 @@ func TestTransientRemovalUsesShardQuarantineForMovementReferencesAndVisibility(t
 			require.NotNil(t, chunk)
 			chunk.Spatial().AddDynamic(target, 60, 50)
 			s := &Shard{world: w, chunkManager: chunks, actionService: f.actions}
+			retired := false
+			ecs.InitResource(w, contracts.NPCLifecycle{Controller: npcQuarantineRetirementProbe(func(handle types.Handle, reason contracts.NPCRetireReason) {
+				require.Equal(t, target, handle)
+				require.Equal(t, contracts.NPCRetireQuarantine, reason)
+				require.True(t, ecs.ObjectDestructionPending(w, handle), "retirement must work after lethal damage commits")
+				require.True(t, ecs.HasComponent[components.Movement](w, handle), "cancel execution before removing its runtime components")
+				retired = true
+			})})
 			f.objects.destruction.deps.Quarantine = func(handle types.Handle) {
 				s.quarantineDestroyedObject(handle)
 				require.False(t, ecs.HasComponent[components.Movement](w, handle), "quarantine must stop movement before despawn")
@@ -190,6 +205,7 @@ func TestTransientRemovalUsesShardQuarantineForMovementReferencesAndVisibility(t
 				require.NoError(t, err)
 			}
 			require.False(t, w.Alive(target))
+			require.True(t, retired)
 			require.Zero(t, chunk.Spatial().DynamicCount())
 			require.Empty(t, chunk.GetDeletedObjectIDs())
 			require.False(t, chunk.IsDirty(w))

@@ -419,6 +419,7 @@ For long-lived behavior state updates (tree growth, machines, etc.), use the sch
 
 - `BehaviorTickSchedule` is the authoritative queue (`entity_id + behavior_key -> due_tick`) with heap-backed due ordering.
 - `ScheduleBehaviorTick(...)` updates one indexed heap record per key in place. Cancellation physically removes queued records; recurring callbacks retain their registration through `CompleteTick` without allocating a new entry.
+- `WakeBehaviorTick(...)` advances an existing queued deadline only when earlier. It preserves pre-popped work and can rearm an executing callback. `ShouldExecuteTick` claims a ready callback once; do not treat it as a repeatable read-only query.
 - `CancelBehaviorTick(...)` and `CancelBehaviorTicksByEntityID(...)` must be used on terminal states/despawn.
 - `World.Despawn(...)` already calls `CancelBehaviorTicksByEntityID(...)`; keep this invariant intact.
 - `BehaviorTickPolicy` controls:

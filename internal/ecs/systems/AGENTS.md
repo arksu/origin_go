@@ -28,7 +28,7 @@ Systems are executed in ascending order of priority (lower priority numbers run 
 | 50       | CharacterSaveSystem   | Periodically saves character data to database                | Transform, Character               | Batch saves character positions/stats                    |
 | 100      | MovementSystem        | Updates entity movement based on Movement components         | Transform, Movement                | Appends to MovedEntities buffer                          |
 | 200      | CollisionSystem       | Performs collision detection and resolution                  | Transform, Collider, ChunkRef      | Reads from MovedEntities buffer                          |
-| 240      | NPCMovementGuard      | Bounds NPC movement by terrain, active chunks, home and time | NPCBrain, MovedEntities            | Feature-owned in game/behaviors; runs before Transform   |
+| 240      | NPCMovementGuard      | Enforces NPC movement ownership, task limits and terrain     | NPCBrain, MovedEntities            | Feature-owned; shares the World's NPCController         |
 | 250      | ExpireDetachedSystem  | Handles delayed despawn of detached entities                 | Detached, Character                | Saves character data before despawn                      |
 | 300      | TransformUpdateSystem | Applies final position updates and publishes movement events | Transform, CollisionResult         | Processes moved entities                                 |
 | 313      | BehaviorTickSystem    | Processes scheduled behavior ticks with global budget        | BehaviorTickSchedule, TimeState    | Runs before cyclic completion; delegates to behaviors    |

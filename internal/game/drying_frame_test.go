@@ -81,7 +81,7 @@ func TestDryingFrameCatalogBuildCompletionAndOpen(t *testing.T) {
 	process := frame.DryingConfig.Processes[0]
 	require.Equal(t, "wild_windsown_weed", process.InputItemKey)
 	require.Equal(t, []string{"seed_wheat", "seed_carrot", "seed_beet", "seed_potato"}, process.OutputItemKeys)
-	require.Equal(t, int64(16*60*60), process.DurationSeconds)
+	require.Equal(t, int64(120), process.DurationSeconds)
 	require.Equal(t, "herbs", process.VisualCategory)
 	require.Equal(t, []string{"drying"}, frame.Station.Capabilities)
 	require.Equal(t, []string{"ready"}, frame.Station.States)
@@ -112,8 +112,8 @@ func TestDryingFrameCatalogBuildCompletionAndOpen(t *testing.T) {
 	require.Equal(t, []string{"drying"}, station.Capabilities)
 	require.Equal(t, "ready", station.CurrentState)
 	collider, _ := ecs.GetComponent[components.Collider](w, site)
-	require.Equal(t, float64(12), collider.HalfWidth)
-	require.Equal(t, float64(4), collider.HalfHeight)
+	require.Equal(t, float64(4), collider.HalfWidth)
+	require.Equal(t, float64(10), collider.HalfHeight)
 	appearance, _ := ecs.GetComponent[components.Appearance](w, site)
 	require.Equal(t, "dframe/empty", appearance.Resource)
 	sender := &dryingFrameSender{opened: make(map[types.EntityID]*netproto.InventoryState), updated: make(map[types.EntityID][]*netproto.InventoryState)}
@@ -139,6 +139,8 @@ type dryingFrameFixture struct {
 func setupLiveDryingFrame(t *testing.T) dryingFrameFixture {
 	t.Helper()
 	frame, _ := loadDryingFrameCatalog(t)
+	// Keep timer scenarios independent of live balance tuning in this fresh test catalog.
+	frame.DryingConfig.Processes[0].DurationSeconds = 16 * 60 * 60
 	registry := behaviors.MustDefaultRegistry()
 	w := ecs.NewWorldForTesting()
 	ecs.GetResource[ecs.TimeState](w).RuntimeSecondsTotal = 100

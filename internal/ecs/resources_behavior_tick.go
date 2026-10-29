@@ -11,8 +11,13 @@ type BehaviorTickKey struct {
 	BehaviorKey string
 }
 
+const (
+	behaviorTickReady     = -1
+	behaviorTickExecuting = -2
+)
+
 type behaviorTickState struct {
-	// A negative index retains registration while a due callback is in flight.
+	// A negative index retains registration for a ready or executing callback.
 	index int
 }
 
@@ -42,6 +47,17 @@ type BehaviorTickSchedule struct {
 }
 
 func (s *BehaviorTickSchedule) Schedule(entityID types.EntityID, behaviorKey string, dueTick uint64) bool {
+	return s.schedule(entityID, behaviorKey, dueTick, false)
+}
+
+// Wake schedules a callback without delaying earlier pending work. A callback
+// already popped for execution remains ready; waking an executing callback
+// rearms its next run. Like Schedule, it returns whether the key is valid.
+func (s *BehaviorTickSchedule) Wake(entityID types.EntityID, behaviorKey string, dueTick uint64) bool {
+	return s.schedule(entityID, behaviorKey, dueTick, true)
+}
+
+func (s *BehaviorTickSchedule) schedule(entityID types.EntityID, behaviorKey string, dueTick uint64, earlierOnly bool) bool {
 	if entityID == 0 {
 		return false
 	}
@@ -54,6 +70,11 @@ func (s *BehaviorTickSchedule) Schedule(entityID types.EntityID, behaviorKey str
 		BehaviorKey: keyName,
 	}
 	current, registered := s.latest[key]
+	if earlierOnly && registered {
+		if current.index == behaviorTickReady || current.index >= 0 && s.queue[current.index].DueTick <= dueTick {
+			return true
+		}
+	}
 	if registered && current.index >= 0 {
 		s.queue[current.index].DueTick = dueTick
 		s.fix(current.index)
@@ -131,9 +152,10 @@ func (s *BehaviorTickSchedule) PopDue(nowTick uint64, max int, dst []BehaviorTic
 }
 
 // PopDueForExecution retains each due key's registration until CompleteTick.
-// The caller must complete every returned key after its synchronous callback,
-// including rejected or failed callbacks. Rearming during that callback reuses
-// registration without allocating; unrearmed one-shot keys are then released.
+// The caller must call ShouldExecuteTick immediately before each synchronous
+// callback, then complete every returned key, including rejected or failed
+// callbacks. Rearming reuses registration without allocating; unrearmed
+// one-shot keys are then released.
 func (s *BehaviorTickSchedule) PopDueForExecution(nowTick uint64, max int, dst []BehaviorTickKey) []BehaviorTickKey {
 	return s.popDue(nowTick, max, dst, true)
 }
@@ -146,11 +168,17 @@ func (s *BehaviorTickSchedule) CompleteTick(key BehaviorTickKey) {
 	}
 }
 
-// ShouldExecuteTick rechecks a pre-popped callback after earlier callbacks may
-// have canceled it or replaced its deadline. Examined keys still consume budget.
+// ShouldExecuteTick claims a pre-popped callback after earlier callbacks may
+// have canceled it or replaced its deadline. Claiming lets Wake distinguish
+// pending work from a callback that must be rearmed. Examined keys still consume
+// budget, and an already claimed callback cannot be claimed a second time.
 func (s *BehaviorTickSchedule) ShouldExecuteTick(key BehaviorTickKey) bool {
 	current, exists := s.latest[key]
-	return exists && current.index < 0
+	if !exists || current.index != behaviorTickReady {
+		return false
+	}
+	s.latest[key] = behaviorTickState{index: behaviorTickExecuting}
+	return true
 }
 
 func (s *BehaviorTickSchedule) popDue(nowTick uint64, max int, dst []BehaviorTickKey, retain bool) []BehaviorTickKey {
@@ -192,7 +220,7 @@ func (s *BehaviorTickSchedule) removeQueued(index int) {
 	}
 	s.queue[last] = behaviorTickHeapItem{}
 	s.queue = s.queue[:last]
-	s.latest[removed.Key] = behaviorTickState{index: -1}
+	s.latest[removed.Key] = behaviorTickState{index: behaviorTickReady}
 	if index < last {
 		s.fix(index)
 	}
@@ -260,6 +288,15 @@ func ScheduleBehaviorTick(w *World, entityID types.EntityID, behaviorKey string,
 	}
 	schedule := GetResource[BehaviorTickSchedule](w)
 	return schedule.Schedule(entityID, behaviorKey, dueTick)
+}
+
+// WakeBehaviorTick schedules an entity's behavior without postponing pending work.
+func WakeBehaviorTick(w *World, entityID types.EntityID, behaviorKey string, dueTick uint64) bool {
+	if w == nil {
+		return false
+	}
+	schedule := GetResource[BehaviorTickSchedule](w)
+	return schedule.Wake(entityID, behaviorKey, dueTick)
 }
 
 func CancelBehaviorTick(w *World, entityID types.EntityID, behaviorKey string) bool {

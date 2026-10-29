@@ -87,6 +87,13 @@ func TransformObjectToDefInPlace(
 		}
 	}
 	previousTypeID := targetInfo.TypeID
+	if previousTypeID != uint32(newDef.DefID) && ecs.HasComponent[components.NPCBrain](w, targetHandle) {
+		// Retire the old execution before changing its definition or removing
+		// runtime components. The contract avoids a world -> behaviors cycle.
+		if lifecycle, exists := ecs.TryGetResource[contracts.NPCLifecycle](w); exists && lifecycle.Controller != nil {
+			lifecycle.Controller.Retire(targetHandle, contracts.NPCRetireTransform)
+		}
+	}
 	if newDef.NPCConfig == nil && ecs.HasComponent[components.NPCBrain](w, targetHandle) {
 		playerstate.StopMovement(w, targetHandle)
 		ecs.RemoveComponent[components.NPCBrain](w, targetHandle)

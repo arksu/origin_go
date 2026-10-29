@@ -147,6 +147,10 @@ The unified runtime registry (`internal/game/behaviors.DefaultRegistry()`) regis
 - `player` — Player behavior (character control)
 - `npc_ai` — Shared NPC decision behavior, initially `passive_wander`; parameters
   are immutable def content and per-instance state lives in one transient NPCBrain.
+  The same immutable NPC catalog validates profiles, capabilities and ability
+  references before runtime. Optional profile params compile at load time; unknown
+  capabilities/abilities are rejected. Production currently enables passive
+  locomotion only, without NPC combat abilities.
 
 ## Integration Points
 

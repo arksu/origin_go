@@ -178,6 +178,8 @@ If you have existing code using auto-assigned IDs:
 
 `ObjectInternalState` is the canonical persistent state container for non-player world objects. Transient NPC decisions use `NPCBrain`; do not duplicate them in its behavior map or add components per species/state/stimulus.
 
+`NPCBrain` separates `NextDecisionTick` from the current activity/movement deadline. Its movement lease carries task-specific constraints and execution ownership. Ability phases and cooldowns belong to the shared action executor; the brain retains only the execution reference. The NPC controller itself is a World resource and consumes no component ID.
+
 - `State` must be a `*RuntimeObjectState` with sparse `Behaviors` map (string behavior key -> typed pointer state).
 - Behavior state keys are canonical string keys from object defs (`"tree"`, `"container"`, ...).
 - Mutations must go through helper functions:

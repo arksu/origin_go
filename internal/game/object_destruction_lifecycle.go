@@ -7,6 +7,7 @@ import (
 	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/behaviors/contracts"
 	netproto "origin/internal/network/proto"
 	"origin/internal/playerstate"
 	"origin/internal/types"
@@ -18,6 +19,9 @@ import (
 // available exclusively to the background snapshot. The owning shard is locked.
 func (s *Shard) quarantineDestroyedObject(target types.Handle) {
 	w := s.world
+	if lifecycle, exists := ecs.TryGetResource[contracts.NPCLifecycle](w); exists && lifecycle.Controller != nil {
+		lifecycle.Controller.Retire(target, contracts.NPCRetireQuarantine)
+	}
 	id, _ := w.GetExternalID(target)
 	info, _ := ecs.GetComponent[components.EntityInfo](w, target)
 	position, _ := ecs.GetComponent[components.Transform](w, target)

@@ -58,3 +58,11 @@ Implementations must be idempotent and avoid clobbering valid restored runtime s
 - Keep helpers private unless they are needed by multiple behavior files.
 - Prefer simple, explicit flows over generic abstraction layers.
 - Shared build-state snapshot helpers may live here when that avoids `internal/game` ↔ `behaviors` import cycles.
+
+## NPC Controller
+
+- `npc_ai` is a stateless adapter; attach one `NPCController` resource explicitly in each World before spawning NPCs. Use the same immutable `NPCCatalog` for definition validation and runtime. Missing dependencies/catalog mismatches are errors, not idle fallbacks.
+- Profiles are Go policies over copied observations/state; return typed intents and consume execution results. The controller owns movement writes. Profile-specific JSON parameters compile once during definition loading.
+- All species share `NPCBrain` ID 40. Keep decision wake time, activity deadline, and movement ownership separate. The movement guard enforces the current lease, not `NPCWander` or a universal fox home radius.
+- `NPCAbilityExecutor` owns ability phases, effects and cooldowns independently of AI scheduling. AI retains only execution identity. Production currently has no NPC combat abilities; future implementations must use the shared action/combat runtime, not a parallel damage engine.
+- Retirement runs synchronously before transform/quarantine and during despawn. `contracts.NPCLifecycle` exposes the same controller to world code without an import cycle. See `docs/features/npc_ai.md` for contracts and remaining combat integration work.

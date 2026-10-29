@@ -56,6 +56,8 @@ func newNPCFoxFixture(t *testing.T) *npcFoxFixture {
 	def, registry := loadNPCFoxCatalog(t)
 	shard, _ := newPlayerSpawnTestShard(t, 64)
 	w := shard.world
+	controller, err := behaviors.AttachNPCController(w, behaviors.NPCControllerConfig{Chunks: shard.chunkManager})
+	require.NoError(t, err)
 	ecs.SetResource(w, ecs.TimeState{Tick: 1, TickRate: 10, TickPeriod: 100 * time.Millisecond, Now: time.Unix(100, 0), UnixMs: 100000})
 	chunk := shard.chunkManager.GetChunk(types.ChunkCoord{})
 	chunk.SetState(types.ChunkStateActive)
@@ -82,7 +84,7 @@ func newNPCFoxFixture(t *testing.T) *npcFoxFixture {
 		BehaviorRegistry: registry, ExecutionDeps: &contracts.ExecutionDeps{Chunks: shard.chunkManager},
 	}))
 	w.AddSystem(systems.NewTransformUpdateSystem(w, shard.chunkManager, shard.eventBus, shard.logger))
-	w.AddSystem(behaviors.NewNPCMovementGuard(w, shard.chunkManager))
+	w.AddSystem(behaviors.NewNPCMovementGuard(controller))
 	w.AddSystem(systems.NewCollisionSystem(w, shard.chunkManager, shard.logger, 0, constt.ChunkWorldSize, 0, constt.ChunkWorldSize, 0))
 	w.AddSystem(systems.NewMovementSystem(w, shard.chunkManager, shard.logger))
 	w.AddSystem(systems.NewResetSystem(shard.logger))
@@ -110,6 +112,8 @@ func newNPCFoxBenchmarkWorld(b *testing.B, population int) (*ecs.World, npcFoxBe
 	}
 	require.NoError(b, chunk.RestoreTiles(tiles, 0, 0))
 	chunk.SetState(types.ChunkStateActive)
+	_, err := behaviors.AttachNPCController(w, behaviors.NPCControllerConfig{Chunks: npcFoxBenchmarkChunks{chunk}})
+	require.NoError(b, err)
 	handles := make([]types.Handle, population)
 	for i := range handles {
 		handles[i] = gameworld.SpawnEntityFromDef(w, def, gameworld.DefSpawnParams{
@@ -157,18 +161,21 @@ func BenchmarkNPCFoxScheduledAI(b *testing.B) {
 func BenchmarkNPCFoxMovementGuard(b *testing.B) {
 	for _, population := range []int{1000, 10000} {
 		b.Run(fmt.Sprintf("population_%d", population), func(b *testing.B) {
-			w, chunks, handles, _ := newNPCFoxBenchmarkWorld(b, population)
+			w, _, handles, _ := newNPCFoxBenchmarkWorld(b, population)
 			moved := ecs.GetResource[ecs.MovedEntities](w)
 			for _, h := range handles {
 				position, _ := ecs.GetComponent[components.Transform](w, h)
 				ecs.WithComponent(w, h, func(brain *components.NPCBrain) {
-					brain.Activity, brain.DeadlineTick = components.NPCWander, 100
+					brain.Activity, brain.ActivityDeadlineTick = components.NPCWander, 100
+					brain.MovementLease = components.NPCMovementLease{Owner: components.NPCMovementAI, Generation: 1, DeadlineTick: 100, HomeRadius: 6 * constt.CoordPerTile}
 				})
 				ecs.WithComponent(w, h, func(movement *components.Movement) { movement.SetTargetPoint(int(position.X)+12, int(position.Y)) })
 				ecs.WithComponent(w, h, func(result *components.CollisionResult) { result.FinalX, result.FinalY = position.X+3.2, position.Y })
 				moved.Add(h, position.X+3.2, position.Y)
 			}
-			guard := behaviors.NewNPCMovementGuard(w, chunks)
+			controller, ok := behaviors.GetNPCController(w)
+			require.True(b, ok)
+			guard := behaviors.NewNPCMovementGuard(controller)
 			guard.Update(w, .1)
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -242,10 +249,10 @@ func TestNPCFoxSpawnWanderAndStopUseSharedPipeline(t *testing.T) {
 	require.Equal(t, components.NPCIdle, brain.Activity)
 	require.Equal(t, 200.0, brain.HomeX)
 	require.Equal(t, 200.0, brain.HomeY)
-	require.InDelta(t, 120, float64(brain.DeadlineTick-1), 40)
-	f.tick(brain.DeadlineTick - 1)
+	require.InDelta(t, 120, float64(brain.NextDecisionTick-1), 40)
+	f.tick(brain.NextDecisionTick - 1)
 	require.Empty(t, drainLiftFollowEvents(t, f.shard.eventBus, f.moves))
-	startTick := brain.DeadlineTick
+	startTick := brain.NextDecisionTick
 	f.tick(startTick)
 	movement, _ := ecs.GetComponent[components.Movement](w, f.fox)
 	require.Equal(t, constt.StateMoving, movement.State)
@@ -306,7 +313,9 @@ func TestNPCFoxMovementPipelineRejectsObstaclesExpiredWalkAndUnsafeFootprints(t 
 				deadline = 2
 			}
 			ecs.WithComponent(w, f.fox, func(brain *components.NPCBrain) {
-				brain.Activity, brain.DeadlineTick = components.NPCWander, deadline
+				brain.Activity, brain.ActivityDeadlineTick = components.NPCWander, deadline
+				brain.NextDecisionTick = deadline
+				brain.MovementLease = components.NPCMovementLease{Owner: components.NPCMovementAI, Generation: 1, DeadlineTick: deadline, HomeRadius: 6 * constt.CoordPerTile}
 			})
 			ecs.ScheduleBehaviorTick(w, 100, "npc_ai", deadline)
 			ecs.WithComponent(w, f.fox, func(movement *components.Movement) { movement.SetTargetPoint(260, 200) })

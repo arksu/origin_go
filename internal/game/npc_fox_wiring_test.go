@@ -12,9 +12,11 @@ import (
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/eventbus"
+	"origin/internal/game/behaviors"
 	"origin/internal/game/behaviors/contracts"
 	gameworld "origin/internal/game/world"
 	"origin/internal/itemdefs"
+	"origin/internal/objectdefs"
 	"origin/internal/sounddefs"
 	"origin/internal/types"
 
@@ -22,7 +24,8 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestNPCFoxWandersWithProductionShardWiring(t *testing.T) {
+func newNPCProductionShard(t testing.TB, capacity int) (*Shard, *objectdefs.ObjectDef, *behaviors.Registry) {
+	t.Helper()
 	def, registry := loadNPCFoxCatalog(t)
 	logger := zap.NewNop()
 	previousActions, previousSounds := actiondefs.Global(), sounddefs.Global()
@@ -40,7 +43,7 @@ func TestNPCFoxWandersWithProductionShardWiring(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := &config.Config{Game: config.GameConfig{
-		MaxEntities: 64, Region: 1, TickRate: 10,
+		MaxEntities: capacity, Region: 1, TickRate: 10,
 		ChunkLRUCapacity: 4, ChunkLRUTTL: 60, LoadWorkers: 1,
 		WorldWidthChunks: 1, WorldHeightChunks: 1,
 		BehaviorTickGlobalBudget: 200, BehaviorTickCatchupLimit: 10,
@@ -64,6 +67,12 @@ func TestNPCFoxWandersWithProductionShardWiring(t *testing.T) {
 	require.NoError(t, chunk.RestoreTiles(tiles, 0, 0))
 	chunk.SetState(types.ChunkStateActive)
 
+	return shard, def, registry
+}
+
+func TestNPCFoxWandersWithProductionShardWiring(t *testing.T) {
+	shard, def, registry := newNPCProductionShard(t, 64)
+	chunk := shard.chunkManager.GetChunkFast(types.ChunkCoord{})
 	ts := ecs.TimeState{Tick: 1, TickRate: 10, TickPeriod: 100 * time.Millisecond, Delta: .1, Now: time.Unix(100, 0), UnixMs: 100000}
 	*ecs.GetResource[ecs.TimeState](shard.world) = ts
 	fox := gameworld.SpawnEntityFromDef(shard.world, def, gameworld.DefSpawnParams{
@@ -76,11 +85,11 @@ func TestNPCFoxWandersWithProductionShardWiring(t *testing.T) {
 	brain, ok := ecs.GetComponent[components.NPCBrain](shard.world, fox)
 	require.True(t, ok)
 	require.Equal(t, components.NPCIdle, brain.Activity)
-	require.Greater(t, brain.DeadlineTick, ts.Tick)
+	require.Greater(t, brain.NextDecisionTick, ts.Tick)
 
 	// Exercise the systems and dependencies installed by NewShard: hand-built
 	// behavior systems can accidentally supply dependencies missing at startup.
-	for ts.Tick <= brain.DeadlineTick {
+	for ts.Tick <= brain.NextDecisionTick {
 		shard.Update(ts)
 		ts.Tick++
 		ts.Now = ts.Now.Add(ts.TickPeriod)
