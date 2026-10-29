@@ -32,6 +32,23 @@ type npcFoxFixture struct {
 	spawns chan *ecs.EntitySpawnBatchEvent
 }
 
+// These fixtures exercise movement/visibility independently of action execution.
+// Production combat and its admission/cooldown rules use the real executor.
+type npcFoxMovementOnlyExecutor struct{}
+
+func (npcFoxMovementOnlyExecutor) TryStart(request contracts.NPCAbilityRequest) contracts.NPCAbilityState {
+	return contracts.NPCAbilityState{Actor: request.Actor, AbilityID: request.AbilityID, Generation: request.Generation, Status: contracts.NPCExecutionRejected}
+}
+func (npcFoxMovementOnlyExecutor) Cancel(actor contracts.EntityRef, generation uint64, _ contracts.NPCRetireReason) contracts.NPCAbilityState {
+	return contracts.NPCAbilityState{Actor: actor, Generation: generation, Status: contracts.NPCExecutionRejected}
+}
+func (npcFoxMovementOnlyExecutor) State(actor contracts.EntityRef, generation uint64) contracts.NPCAbilityState {
+	return contracts.NPCAbilityState{Actor: actor, Generation: generation, Status: contracts.NPCExecutionRejected}
+}
+func (npcFoxMovementOnlyExecutor) Availability(contracts.EntityRef, string, contracts.NPCTarget) contracts.NPCAbilityAvailabilityState {
+	return contracts.NPCAbilityAvailabilityState{}
+}
+
 func loadNPCFoxCatalog(t testing.TB) (*objectdefs.ObjectDef, *behaviors.Registry) {
 	t.Helper()
 	previous, previousItems := objectdefs.Global(), itemdefs.Global()
@@ -56,7 +73,8 @@ func newNPCFoxFixture(t *testing.T) *npcFoxFixture {
 	def, registry := loadNPCFoxCatalog(t)
 	shard, _ := newPlayerSpawnTestShard(t, 64)
 	w := shard.world
-	controller, err := behaviors.AttachNPCController(w, behaviors.NPCControllerConfig{Chunks: shard.chunkManager})
+	core.AttachColliderSpatial(w)
+	controller, err := behaviors.AttachNPCController(w, behaviors.NPCControllerConfig{Chunks: shard.chunkManager, Abilities: npcFoxMovementOnlyExecutor{}})
 	require.NoError(t, err)
 	ecs.SetResource(w, ecs.TimeState{Tick: 1, TickRate: 10, TickPeriod: 100 * time.Millisecond, Now: time.Unix(100, 0), UnixMs: 100000})
 	chunk := shard.chunkManager.GetChunk(types.ChunkCoord{})
@@ -104,6 +122,7 @@ func newNPCFoxBenchmarkWorld(b *testing.B, population int) (*ecs.World, npcFoxBe
 	b.Helper()
 	def, registry := loadNPCFoxCatalog(b)
 	w := ecs.NewWorldWithCapacity(uint32(population+1), nil, 0)
+	core.AttachColliderSpatial(w)
 	ecs.SetResource(w, ecs.TimeState{Tick: 1, TickRate: 10, TickPeriod: 100 * time.Millisecond})
 	chunk := core.NewChunk(types.ChunkCoord{}, 1, 0, constt.ChunkSize)
 	tiles := make([]byte, constt.ChunkSize*constt.ChunkSize)
@@ -112,7 +131,7 @@ func newNPCFoxBenchmarkWorld(b *testing.B, population int) (*ecs.World, npcFoxBe
 	}
 	require.NoError(b, chunk.RestoreTiles(tiles, 0, 0))
 	chunk.SetState(types.ChunkStateActive)
-	_, err := behaviors.AttachNPCController(w, behaviors.NPCControllerConfig{Chunks: npcFoxBenchmarkChunks{chunk}})
+	_, err := behaviors.AttachNPCController(w, behaviors.NPCControllerConfig{Chunks: npcFoxBenchmarkChunks{chunk}, Abilities: npcFoxMovementOnlyExecutor{}})
 	require.NoError(b, err)
 	handles := make([]types.Handle, population)
 	for i := range handles {
@@ -125,7 +144,7 @@ func newNPCFoxBenchmarkWorld(b *testing.B, population int) (*ecs.World, npcFoxBe
 	return w, npcFoxBenchmarkChunks{chunk}, handles, registry
 }
 
-// Each operation processes the production budget of 200 overdue NPC callbacks,
+// Each operation processes a fixed microbenchmark budget of 200 overdue NPC callbacks,
 // including real decisions, candidate terrain checks, movement writes and rearm.
 // Advancing by 1000 ticks keeps the entire population eligible; start/stop
 // transitions alternate as entities recur, without network or collision costs.
@@ -249,9 +268,11 @@ func TestNPCFoxSpawnWanderAndStopUseSharedPipeline(t *testing.T) {
 	require.Equal(t, components.NPCIdle, brain.Activity)
 	require.Equal(t, 200.0, brain.HomeX)
 	require.Equal(t, 200.0, brain.HomeY)
-	require.InDelta(t, 120, float64(brain.NextDecisionTick-1), 40)
-	f.tick(brain.NextDecisionTick - 1)
+	require.LessOrEqual(t, brain.NextDecisionTick, uint64(11), "idle perception polls at most one second apart")
+	require.InDelta(t, 120, float64(brain.Cautious.IdleUntilTick-1), 40)
+	f.tick(brain.Cautious.IdleUntilTick - 1)
 	require.Empty(t, drainLiftFollowEvents(t, f.shard.eventBus, f.moves))
+	brain, _ = ecs.GetComponent[components.NPCBrain](w, f.fox)
 	startTick := brain.NextDecisionTick
 	f.tick(startTick)
 	movement, _ := ecs.GetComponent[components.Movement](w, f.fox)
@@ -367,4 +388,32 @@ func TestNPCFoxMovementPipelineRejectsObstaclesExpiredWalkAndUnsafeFootprints(t 
 			require.Empty(t, f.shard.chunkManager.GetEntityActiveChunks(100))
 		})
 	}
+}
+
+func TestNPCFoxWatchPublishesStationaryFacingThroughMovement(t *testing.T) {
+	f := newNPCFoxFixture(t)
+	w := f.shard.world
+	f.observe(t)
+	w.Spawn(250, func(w *ecs.World, h types.Handle) {
+		ecs.AddComponent(w, h, components.Transform{X: 200, Y: 240})
+		ecs.AddComponent(w, h, components.Collider{HalfWidth: 2, HalfHeight: 2})
+		ecs.AddComponent(w, h, components.CharacterProfile{})
+		ecs.AddComponent(w, h, components.EntityHealth{SHP: 100, HHP: 100})
+	})
+	brain, _ := ecs.GetComponent[components.NPCBrain](w, f.fox)
+	f.tick(brain.NextDecisionTick)
+	brain, _ = ecs.GetComponent[components.NPCBrain](w, f.fox)
+	require.Equal(t, components.NPCWatch, brain.Activity)
+	f.tick(ecs.GetResource[ecs.TimeState](w).Tick + 1)
+	events := drainLiftFollowEvents(t, f.shard.eventBus, f.moves)
+	require.Len(t, events, 1)
+	require.Len(t, events[0].Entries, 1)
+	entry := events[0].Entries[0]
+	require.Equal(t, types.EntityID(100), entry.EntityID)
+	require.False(t, entry.IsMoving)
+	require.InDelta(t, math.Pi/2, entry.Heading, 1e-9)
+	require.Equal(t, 200, entry.X)
+	require.Equal(t, 200, entry.Y)
+	brain, _ = ecs.GetComponent[components.NPCBrain](w, f.fox)
+	require.Empty(t, brain.DamageSource, "peaceful perception never authorizes combat")
 }

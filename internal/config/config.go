@@ -239,7 +239,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("game.chat_min_interval_ms", 400)
 	v.SetDefault("game.interaction_pending_timeout", 15*time.Second)
 	v.SetDefault("game.object_behavior_budget_per_tick", 512)
-	v.SetDefault("game.behavior_tick_global_budget_per_tick", 200)
+	v.SetDefault("game.behavior_tick_global_budget_per_tick", _const.DefaultBehaviorTickBudget)
 	v.SetDefault("game.behavior_tick_catchup_limit_ticks", 2000)
 	v.SetDefault("game.player_stats_ttl_ms", 1000)
 	v.SetDefault("game.stamina_regen_interval_ticks", _const.DefaultStaminaRegenIntervalTicks)

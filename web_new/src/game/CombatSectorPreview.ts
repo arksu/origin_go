@@ -1,6 +1,6 @@
 import { Container, Graphics } from 'pixi.js'
-import { directionSectorPoints, type DirectionSector } from './hud/directionAim'
-import { coordGame2Screen } from './utils/coordConvert'
+import type { DirectionSector } from './hud/directionAim'
+import { projectSectorPoints } from './hud/projectedSector'
 import type { ScreenPoint } from './types'
 
 export const COMBAT_SECTOR_DURATION_MS = 1000
@@ -27,12 +27,7 @@ export class CombatSectorPreview {
       this.clear()
       return
     }
-    this.points.length = 0
-    // Project around a local origin once. Movement changes only the container position.
-    for (const point of directionSectorPoints({ x: 0, y: 0 }, direction, sector)) {
-      const projected = coordGame2Screen(point.x, point.y)
-      this.points.push(projected.x, projected.y)
-    }
+    projectSectorPoints(this.points, direction, sector)
     this.expiresAt = now + COMBAT_SECTOR_DURATION_MS
     this.shape.position.set(origin.x, origin.y)
     this.shape.visible = true

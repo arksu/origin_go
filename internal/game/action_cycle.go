@@ -26,6 +26,10 @@ func (service *ActionService) AdvanceCycle(world *ecs.World, playerID types.Enti
 		service.Cancel(world, playerID, playerHandle)
 		return
 	}
+	if definition.Audience == actiondefs.AudienceNPC && (service.npcAbilities == nil || !service.npcAbilities.validActive(playerHandle, active)) {
+		service.Cancel(world, playerID, playerHandle)
+		return
+	}
 	if cycle.ActionCompletionStarted {
 		return
 	}
@@ -35,6 +39,9 @@ func (service *ActionService) AdvanceCycle(world *ecs.World, playerID types.Enti
 	}
 	if definition.Target.Kind == actiondefs.TargetObject && !world.Alive(active.TargetHandle) {
 		service.Complete(world, playerID, playerHandle, active.Generation, false, "ACTION_INVALID_TARGET")
+		return
+	}
+	if definition.Audience == actiondefs.AudienceNPC && ecs.GetResource[ecs.TimeState](world).Tick <= cycle.StartedTick {
 		return
 	}
 	cycle.CycleElapsedTicks++
@@ -50,7 +57,7 @@ func (service *ActionService) AdvanceCycle(world *ecs.World, playerID types.Enti
 		}
 		advanceActionSoundCues(world, playerHandle, &cycle, service.soundEvents)
 	}
-	if progress != nil {
+	if progress != nil && definition.PlayerAvailable() {
 		progress.SendCyclicActionProgress(playerID, &netproto.S2C_CyclicActionProgress{
 			ActionId: cycle.ActionID, TargetEntityId: uint64(cycle.TargetID),
 			CycleIndex: cycle.CycleIndex, ElapsedTicks: cycle.CycleElapsedTicks, TotalTicks: cycle.CycleDurationTicks,

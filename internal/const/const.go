@@ -5,6 +5,9 @@ import "time"
 // DestroyedObjectDropSpread bounds independent X/Y offsets of container loot.
 const DestroyedObjectDropSpread = 10
 
+// DefaultBehaviorTickBudget includes staggered animal perception and decisions.
+const DefaultBehaviorTickBudget = 2500
+
 const (
 	ChunkSize      = 128
 	CoordPerTile   = 12

@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	constt "origin/internal/const"
+	"origin/internal/core"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/game/behaviors/contracts"
@@ -27,6 +28,7 @@ type NPCController struct {
 	catalog    *NPCCatalog
 	abilities  contracts.NPCAbilityExecutor
 	generation uint64
+	candidates [256]types.Handle
 }
 
 func npcNilInterface(v any) bool {
@@ -95,6 +97,16 @@ func (c *NPCController) init(ctx *contracts.BehaviorObjectInitContext) error {
 	if !ok {
 		return fmt.Errorf("NPC profile %q is not registered", def.NPCConfig.Profile)
 	}
+	if profile.PerceptionRadius > 0 {
+		if spatial, exists := ecs.TryGetResource[*core.WorldColliderSpatial](c.world); !exists || *spatial == nil || (*spatial).Index == nil {
+			return fmt.Errorf("NPC perception requires collider spatial index")
+		}
+	}
+	if profile.RequiresAbilityAvailability {
+		if _, exists := c.abilities.(contracts.NPCAbilityAvailability); !exists {
+			return fmt.Errorf("NPC profile requires ability availability")
+		}
+	}
 	transform, ok := ecs.GetComponent[components.Transform](c.world, ctx.Handle)
 	if !ok {
 		return fmt.Errorf("npc_ai object has no transform")
@@ -110,6 +122,7 @@ func (c *NPCController) init(ctx *contracts.BehaviorObjectInitContext) error {
 	ecs.AddComponent(c.world, ctx.Handle, components.Movement{Mode: constt.Walk, State: constt.StateIdle, Speed: def.NPCConfig.Speed})
 	ecs.AddComponent(c.world, ctx.Handle, components.CollisionResult{FinalX: transform.X, FinalY: transform.Y})
 	obs := c.observe(ctx.Handle, ctx.EntityID, brain, ecs.GetResource[ecs.TimeState](c.world).Tick)
+	c.observeProfile(profile, brain, *def.NPCConfig, float64(def.HP), &obs)
 	d := NPCDecision{State: brain.NPCPolicyState, NextDecisionTick: obs.Tick + 1}
 	if profile.Init != nil {
 		d = profile.Init(brain.NPCPolicyState, obs, *def.NPCConfig)
@@ -126,15 +139,74 @@ func (c *NPCController) observe(h types.Handle, id types.EntityID, brain compone
 	transform, _ := ecs.GetComponent[components.Transform](c.world, h)
 	movement, _ := ecs.GetComponent[components.Movement](c.world, h)
 	obs := NPCObservation{Actor: contracts.EntityRef{Handle: h, EntityID: id}, Position: contracts.NPCPoint{X: transform.X, Y: transform.Y}, Home: contracts.NPCPoint{X: brain.HomeX, Y: brain.HomeY}, Tick: tick, TicksPerSecond: npcTicksPerSecond(ecs.GetResource[ecs.TimeState](c.world)), Moving: movement.State == constt.StateMoving, LastResult: brain.LastResult, ActivityDeadlineTick: brain.ActivityDeadlineTick, NextDecisionTick: brain.NextDecisionTick}
-	if c.valid(brain.Target) {
-		if tr, ok := ecs.GetComponent[components.Transform](c.world, brain.Target.Handle); ok {
-			obs.Target = NPCObservedEntity{Ref: brain.Target, Position: contracts.NPCPoint{X: tr.X, Y: tr.Y}, Valid: true}
-		}
+	obs.Target = c.observeEntity(brain.Target)
+	obs.DamageRevision = brain.DamageRevision
+	if hp, exists := ecs.GetComponent[components.ObjectInternalState](c.world, h); exists && hp.HasHP {
+		obs.HP, obs.HasHP = float64(hp.HP), true
 	}
 	if brain.Ability.Generation != 0 && c.abilities != nil {
 		obs.Ability = c.abilities.State(obs.Actor, brain.Ability.Generation)
+		if brain.Ability.Target.Kind == contracts.NPCTargetEntity {
+			obs.AbilityTarget = c.observeEntity(brain.Ability.Target.Entity)
+		}
 	}
 	return obs
+}
+func (c *NPCController) observeEntity(ref contracts.EntityRef) NPCObservedEntity {
+	if !c.valid(ref) {
+		return NPCObservedEntity{}
+	}
+	tr, ok := ecs.GetComponent[components.Transform](c.world, ref.Handle)
+	if !ok {
+		return NPCObservedEntity{}
+	}
+	entity := NPCObservedEntity{Ref: ref, Position: contracts.NPCPoint{X: tr.X, Y: tr.Y}, Valid: true}
+	if move, exists := ecs.GetComponent[components.Movement](c.world, ref.Handle); exists {
+		entity.Moving = move.State == constt.StateMoving
+	}
+	if hp, exists := ecs.GetComponent[components.EntityHealth](c.world, ref.Handle); exists {
+		entity.HP, entity.HasHP = hp.SHP, true
+		entity.Incapacitated = playerstate.IsIncapacitated(c.world, ref.Handle)
+	}
+	return entity
+}
+
+func (c *NPCController) observeProfile(profile NPCProfile, brain components.NPCBrain, cfg contracts.NPCBehaviorConfig, maxHP float64, obs *NPCObservation) {
+	obs.MaxHP = maxHP
+	if profile.PerceptionRadius > 0 {
+		obs.Encounter = c.observeEntity(brain.Cautious.Encounter)
+		spatial, exists := ecs.TryGetResource[*core.WorldColliderSpatial](c.world)
+		if exists && *spatial != nil && (*spatial).Index != nil {
+			radius := profile.PerceptionRadius
+			candidates, err := (*spatial).Index.QueryBoundedInto(core.ColliderBounds{MinX: obs.Position.X - radius, MinY: obs.Position.Y - radius, MaxX: obs.Position.X + radius, MaxY: obs.Position.Y + radius}, c.candidates[:0], core.ColliderQueryBudget{MaxCells: 256, MaxVisits: 1024})
+			if err == nil {
+				obs.PerceptionKnown = true
+				nearestSq := radius * radius
+				for _, h := range candidates {
+					if !ecs.HasComponent[components.CharacterProfile](c.world, h) {
+						continue
+					}
+					id, found := c.world.GetExternalID(h)
+					if !found {
+						continue
+					}
+					entity := c.observeEntity(contracts.EntityRef{Handle: h, EntityID: id})
+					if !entity.Valid || !entity.HasHP || entity.HP <= 0 || entity.Incapacitated {
+						continue
+					}
+					distance := npcDistanceSquared(obs.Position, entity.Position)
+					if distance < nearestSq || (distance == nearestSq && (!obs.NearbyPlayer.Valid || id < obs.NearbyPlayer.Ref.EntityID)) {
+						obs.NearbyPlayer, nearestSq = entity, distance
+					}
+				}
+			}
+		}
+	}
+	if profile.RequiresAbilityAvailability && len(cfg.Abilities) > 0 {
+		if availability, exists := c.abilities.(contracts.NPCAbilityAvailability); exists {
+			obs.AvailableAbility = availability.Availability(obs.Actor, cfg.Abilities[0], contracts.NPCTarget{Kind: contracts.NPCTargetEntity, Entity: obs.Target.Ref})
+		}
+	}
 }
 func (c *NPCController) tick(ctx *contracts.BehaviorTickContext) error {
 	def, ok := npcDefinition(c.world, ctx.Handle, ctx.EntityID, ctx.EntityType)
@@ -153,6 +225,7 @@ func (c *NPCController) tick(ctx *contracts.BehaviorTickContext) error {
 		return fmt.Errorf("unknown NPC profile %q", def.NPCConfig.Profile)
 	}
 	obs := c.observe(ctx.Handle, ctx.EntityID, brain, ctx.CurrentTick)
+	c.observeProfile(profile, brain, *def.NPCConfig, float64(def.HP), &obs)
 	c.reconcileAbility(ctx.Handle, &brain, &obs)
 	d := profile.Decide(brain.NPCPolicyState, obs, *def.NPCConfig)
 	brain.NPCPolicyState = d.State
@@ -193,7 +266,7 @@ func (c *NPCController) execute(h types.Handle, brain *components.NPCBrain, obs 
 	switch intent.Kind {
 	case contracts.NPCIntentContinue, contracts.NPCIntentWait:
 		return result
-	case contracts.NPCIntentMove, contracts.NPCIntentStop:
+	case contracts.NPCIntentMove, contracts.NPCIntentStop, contracts.NPCIntentFace:
 		if brain.MovementLease.Owner == components.NPCMovementAbility && brain.Ability.Generation != 0 {
 			result.Status = contracts.NPCExecutionBusy
 			return result
@@ -205,6 +278,26 @@ func (c *NPCController) execute(h types.Handle, brain *components.NPCBrain, obs 
 		if intent.Kind == contracts.NPCIntentStop {
 			c.stop(h, brain)
 			result.Status = contracts.NPCExecutionCompleted
+			return result
+		}
+		if intent.Kind == contracts.NPCIntentFace {
+			if !npcValidPoint(intent.Face) {
+				return contracts.NPCExecutionResult{Status: contracts.NPCExecutionRejected}
+			}
+			c.stop(h, brain)
+			tr, ok := ecs.GetComponent[components.Transform](c.world, h)
+			if !ok {
+				return contracts.NPCExecutionResult{Status: contracts.NPCExecutionRejected}
+			}
+			dx, dy := intent.Face.X-tr.X, intent.Face.Y-tr.Y
+			if dx != 0 || dy != 0 {
+				direction := math.Atan2(dy, dx)
+				if tr.Direction != direction {
+					tr.Direction = direction
+					ecs.AddComponent(c.world, h, tr)
+					ecs.WithComponent(c.world, h, func(movement *components.Movement) { movement.Direction.UpdatePending = true })
+				}
+			}
 			return result
 		}
 		return c.move(h, brain, obs, intent.Move)
@@ -428,6 +521,27 @@ func (c *NPCController) SetTarget(actor, target contracts.EntityRef) bool {
 	ecs.WakeBehaviorTick(c.world, actor.EntityID, npcAIKey, ecs.GetResource[ecs.TimeState](c.world).Tick)
 	return true
 }
+
+// NotifyDamage records only a confirmed player attack after the complete damage
+// batch committed a positive HP loss. Callers hold the owning shard lock. Mere
+// targeting, misses, and zero damage must not call this ingress.
+func (c *NPCController) NotifyDamage(target, source contracts.EntityRef) bool {
+	if !c.valid(target) || !c.valid(source) || !ecs.HasComponent[components.CharacterProfile](c.world, source.Handle) {
+		return false
+	}
+	brain, exists := ecs.GetComponent[components.NPCBrain](c.world, target.Handle)
+	if !exists {
+		return false
+	}
+	brain.Target, brain.DamageSource = source, source
+	brain.DamageRevision++
+	if brain.DamageRevision == 0 {
+		brain.DamageRevision = 1
+	}
+	ecs.AddComponent(c.world, target.Handle, brain)
+	ecs.WakeBehaviorTick(c.world, target.EntityID, npcAIKey, ecs.GetResource[ecs.TimeState](c.world).Tick)
+	return true
+}
 func (c *NPCController) Retire(h types.Handle, reason contracts.NPCRetireReason) {
 	// Destruction-pending actors still need cancellation before components vanish.
 	if !c.world.Alive(h) {
@@ -444,6 +558,7 @@ func (c *NPCController) Retire(h types.Handle, reason contracts.NPCRetireReason)
 	c.cancelAbility(h, &brain, contracts.EntityRef{Handle: h, EntityID: id}, reason)
 	c.stop(h, &brain)
 	brain.Target = contracts.EntityRef{}
+	brain.DamageSource = contracts.EntityRef{}
 	brain.NextDecisionTick = 0
 	brain.LastResult = contracts.NPCExecutionCanceled
 	ecs.AddComponent(c.world, h, brain)

@@ -161,7 +161,7 @@ func NewWorldWithCapacity(maxHandles uint32, eventBus *eventbus.EventBus, layer 
 		StaminaRegenIntervalTicks: defaultStaminaRegenIntervalTicks,
 	})
 	InitResource(w, BehaviorTickPolicy{
-		GlobalBudgetPerTick: 200,
+		GlobalBudgetPerTick: constt.DefaultBehaviorTickBudget,
 		CatchUpLimitTicks:   2000,
 	})
 	InitResource(w, PendingAdminSpawn{

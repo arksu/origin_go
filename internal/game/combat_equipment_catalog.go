@@ -96,14 +96,24 @@ func NewCombatEquipmentCatalog(items *itemdefs.Registry) (*CombatEquipmentCatalo
 type PreparedMeleeAction struct {
 	catalog    *CombatEquipmentCatalog
 	multiplier float64
+	rawDamage  float64
 	slots      combatSlotMask
 	types      map[uint32]struct{}
 }
 
 func (catalog *CombatEquipmentCatalog) PrepareMeleeAction(definition *actiondefs.Definition) (*PreparedMeleeAction, error) {
 	if catalog == nil || catalog.items == nil || definition == nil || definition.Target.Kind != actiondefs.TargetDirection ||
-		definition.Combat == nil || !positiveCombatParameter(definition.Combat.DamageMultiplier) {
+		definition.Combat == nil || (definition.Combat.RawDamage == nil && !positiveCombatParameter(definition.Combat.DamageMultiplier)) {
 		return nil, fmt.Errorf("melee preparation requires a catalog and a valid combat action")
+	}
+	if definition.Combat.RawDamage != nil {
+		if definition.Audience != actiondefs.AudienceNPC || !positiveCombatParameter(*definition.Combat.RawDamage) || definition.Combat.DamageMultiplier != 0 || len(definition.Requirements.Equipment) != 0 || len(definition.Requirements.Skills) != 0 || definition.Execution.Stamina != 0 {
+			return nil, fmt.Errorf("natural melee action %q has mixed or invalid damage source", definition.ID)
+		}
+		return &PreparedMeleeAction{catalog: catalog, rawDamage: *definition.Combat.RawDamage}, nil
+	}
+	if definition.Audience == actiondefs.AudienceNPC {
+		return nil, fmt.Errorf("NPC melee action %q requires a natural damage source", definition.ID)
 	}
 	var source *actiondefs.EquipmentRequirement
 	for index := range definition.Requirements.Equipment {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"origin/internal/characterattrs"
+	"origin/internal/combatpresentation"
 	_const "origin/internal/const"
 	"origin/internal/core"
 	"origin/internal/cyclicaction"
@@ -142,10 +143,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		logger.Fatal("Invalid world sound configuration", zap.Error(soundErr))
 	}
 	s.chunkManager = world.NewChunkManager(cfg, db, s.world, s, layer, cfg.Game.Region, objectFactory, behaviorRegistry, eb, logger)
-	npcController, npcErr := behaviors.AttachNPCController(s.world, behaviors.NPCControllerConfig{Chunks: s.chunkManager})
-	if npcErr != nil {
-		logger.Fatal("Invalid NPC controller configuration", zap.Error(npcErr))
-	}
+	combatpresentation.Attach(s.world, s)
 	if layer == hearth.SurfaceLayer && db != nil {
 		var spotErr error
 		s.spotManager, spotErr = world.NewSpotManager(context.Background(), cfg, world.NewSpotStoreDB(db), s.chunkManager.SubmitPersistenceJob, logger)
@@ -330,6 +328,17 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		logger.Fatal("Invalid action handler registry", zap.Error(actionErr))
 	}
 	s.actionService = actionService
+	npcAbilities, npcErr := NewNPCAbilityExecutor(s.world, actionService, s.chunkManager)
+	if npcErr != nil {
+		logger.Fatal("Invalid NPC ability executor", zap.Error(npcErr))
+	}
+	npcController, npcErr := behaviors.AttachNPCController(s.world, behaviors.NPCControllerConfig{Chunks: s.chunkManager, Abilities: npcAbilities})
+	if npcErr != nil {
+		logger.Fatal("Invalid NPC controller configuration", zap.Error(npcErr))
+	}
+	s.meleeExecution.SetDamageObserver(func(target, source contracts.EntityRef) {
+		npcController.NotifyDamage(target, source)
+	})
 	s.creatureDamage.SetActionInterrupter(actionService.Interrupt)
 	actionService.SetSoundEventService(s.soundEvents)
 	actionService.SetApproachTimeout(cfg.Game.InteractionPendingTimeout)

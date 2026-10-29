@@ -29,6 +29,7 @@
     "bench:damage-numbers": "node scripts/test-character-visual.mjs scripts/bench-damage-numbers.ts --expose-gc",
     "test:action-execution": "node scripts/test-character-visual.mjs tests/action-execution.test.ts",
     "test:combat-sector": "node scripts/test-character-visual.mjs tests/combat-sector.test.ts",
+    "test:combat-telegraph": "node scripts/test-character-visual.mjs tests/combat-telegraph.test.ts",
     "bench:combat-sector": "node scripts/test-character-visual.mjs scripts/bench-combat-sector.ts",
     "test:direction-aim": "node scripts/test-character-visual.mjs tests/direction-aim.test.ts",
     "test:action-animations": "node scripts/test-character-visual.mjs tests/action-animations.test.ts",

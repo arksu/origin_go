@@ -109,6 +109,7 @@ type ActionService struct {
 	handlers        map[string]ActionHandler
 	sender          actionSender
 	soundEvents     *SoundEventService
+	npcAbilities    *NPCAbilityExecutor
 	nextGeneration  uint64
 	approachTimeout time.Duration
 }
@@ -164,7 +165,7 @@ func (service *ActionService) State(world *ecs.World, playerHandle types.Handle)
 }
 
 func (service *ActionService) SendState(world *ecs.World, playerID types.EntityID, playerHandle types.Handle) {
-	if service != nil && service.sender != nil {
+	if service != nil && service.sender != nil && !ecs.HasComponent[components.NPCBrain](world, playerHandle) {
 		service.sender.SendActionStateChanged(playerID, service.State(world, playerHandle))
 	}
 }
@@ -175,6 +176,9 @@ func (service *ActionService) SendList(playerID types.EntityID) {
 	}
 	list := &netproto.S2C_ActionList{Actions: make([]*netproto.ActionDefinition, 0, len(service.definitions.All()))}
 	for _, definition := range service.definitions.All() {
+		if !definition.PlayerAvailable() {
+			continue
+		}
 		requirements := make([]*netproto.ActionEquipmentRequirement, 0, len(definition.Requirements.Equipment))
 		for _, requirement := range definition.Requirements.Equipment {
 			requirements = append(requirements, &netproto.ActionEquipmentRequirement{
@@ -206,6 +210,12 @@ func (service *ActionService) Recheck(world *ecs.World, playerID types.EntityID,
 	if !exists {
 		return
 	}
+	if service.npcAbilities != nil && service.npcAbilities.isNPCAction(active.ActionID) {
+		if !service.npcAbilities.validActive(playerHandle, active) {
+			service.Cancel(world, playerID, playerHandle)
+		}
+		return
+	}
 	if service.rejectIncapacitatedAction(world, playerID, playerHandle, active.ActionID) {
 		service.Cancel(world, playerID, playerHandle)
 		return
@@ -235,6 +245,10 @@ func (service *ActionService) ActivateRequest(world *ecs.World, playerID types.E
 		return
 	}
 	id := request.ActionId
+	if !service.playerActionAllowed(id) {
+		service.alert(playerID, "ACTION_UNAVAILABLE")
+		return
+	}
 	target := ActionTarget{}
 	if service.isDirectionAction(id) {
 		// Legacy finite aim is accepted for wire compatibility, but never controls
@@ -300,6 +314,10 @@ func (service *ActionService) availableDefinition(world *ecs.World, playerID typ
 		service.alert(playerID, "ACTION_UNKNOWN")
 		return nil
 	}
+	if !definition.PlayerAvailable() {
+		service.alert(playerID, "ACTION_UNAVAILABLE")
+		return nil
+	}
 	if reason := service.UnavailableReason(world, playerID, playerHandle, definition); reason != "" {
 		service.alert(playerID, reason)
 		return nil
@@ -310,6 +328,10 @@ func (service *ActionService) availableDefinition(world *ecs.World, playerID typ
 // StartTargetedOnce accepts a server-routed target without arming a selection or retry.
 func (service *ActionService) StartTargetedOnce(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, id string, targetID types.EntityID, targetHandle types.Handle, x, y float64) {
 	if service == nil || world != service.world || !world.Alive(playerHandle) {
+		return
+	}
+	if !service.playerActionAllowed(id) {
+		service.alert(playerID, "ACTION_UNAVAILABLE")
 		return
 	}
 	service.Interrupt(world, playerID, playerHandle)
@@ -455,7 +477,7 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 	}
 	var activity *ecs.CombatActivityState
 	var eventTime int64
-	if definition.Combat != nil {
+	if definition.Combat != nil && definition.PlayerAvailable() {
 		activity = ecs.GetResource[ecs.CombatActivityState](world)
 		eventTime = ecs.GetResource[ecs.TimeState](world).UnixMs
 		if err := activity.ValidateEvent(playerHandle, playerID, eventTime); err != nil {
@@ -469,7 +491,7 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 			return
 		}
 	}
-	if definition.Execution.Ticks > 0 {
+	if duration := actionDurationTicks(world, definition); duration > 0 {
 		kind := components.CyclicActionTargetSelf
 		if definition.Target.Kind == actiondefs.TargetObject {
 			kind = components.CyclicActionTargetObject
@@ -480,7 +502,7 @@ func (service *ActionService) beginExecution(world *ecs.World, playerID types.En
 			TargetKind:   kind, TargetID: target.ObjectID, TargetHandle: target.ObjectHandle,
 			HasTargetPosition: definition.Target.Kind == actiondefs.TargetTile, TargetX: target.X, TargetY: target.Y,
 			HasFacingAngle: definition.Target.Kind == actiondefs.TargetDirection, FacingAngle: target.AimAngle,
-			CycleDurationTicks: uint32(definition.Execution.Ticks), CycleIndex: 1, StartedTick: ecs.GetResource[ecs.TimeState](world).Tick,
+			CycleDurationTicks: duration, CycleIndex: 1, StartedTick: ecs.GetResource[ecs.TimeState](world).Tick,
 		}, actionanimationdefs.Source{Kind: "menu", ID: definition.ID})
 		if activity != nil {
 			activity.RecordPreparedEvent(playerHandle, eventTime)
@@ -615,6 +637,9 @@ func (service *ActionService) finishAction(world *ecs.World, playerID types.Enti
 		return
 	}
 	ecs.RemoveComponent[components.ActiveGameAction](world, playerHandle)
+	if service.npcAbilities != nil {
+		service.npcAbilities.finished(playerHandle, active, success)
+	}
 	service.SendState(world, playerID, playerHandle)
 }
 
@@ -659,11 +684,21 @@ func (service *ActionService) Cancel(world *ecs.World, playerID types.EntityID, 
 	}
 	service.stopOwnedMovement(world, playerID, playerHandle, active)
 	service.clearCycle(world, playerID, playerHandle, false, "")
+	if service.npcAbilities != nil {
+		service.npcAbilities.finished(playerHandle, active, false)
+	}
 	service.SendState(world, playerID, playerHandle)
 }
 
 func (service *ActionService) stopOwnedMovement(world *ecs.World, playerID types.EntityID, playerHandle types.Handle, active components.ActiveGameAction) {
 	if !active.MovementOwned {
+		return
+	}
+	if definition, ok := service.definitions.Get(active.ActionID); ok && definition.Audience == actiondefs.AudienceNPC {
+		// The executor holds a stationary lease. Do not stop a newer AI route.
+		if brain, ok := ecs.GetComponent[components.NPCBrain](world, playerHandle); ok && brain.MovementLease.Owner == components.NPCMovementAbility && brain.MovementLease.Generation == active.Generation {
+			playerstate.StopMovement(world, playerHandle)
+		}
 		return
 	}
 	linkState := ecs.GetResource[ecs.LinkState](world)
@@ -683,7 +718,7 @@ func (service *ActionService) clearCycle(world *ecs.World, playerID types.Entity
 		return
 	}
 	cyclicaction.Clear(world, playerHandle)
-	if service.sender == nil {
+	if service.sender == nil || !service.playerActionAllowed(cycle.ActionID) {
 		return
 	}
 	result := netproto.CyclicActionFinishResult_CYCLIC_ACTION_FINISH_RESULT_CANCELED
@@ -698,7 +733,7 @@ func (service *ActionService) clearCycle(world *ecs.World, playerID types.Entity
 }
 
 func (service *ActionService) alert(playerID types.EntityID, reason string) {
-	if service.sender != nil && reason != "" {
+	if service.sender != nil && reason != "" && !ecs.HasComponent[components.NPCBrain](service.world, service.world.GetHandleByEntityID(playerID)) {
 		service.sender.SendMiniAlert(playerID, &netproto.S2C_MiniAlert{
 			Severity: netproto.AlertSeverity_ALERT_SEVERITY_WARNING, ReasonCode: reason, TtlMs: 3000,
 		})
@@ -711,4 +746,21 @@ type itemMutationHandler interface{ RequiresItemMutation() bool }
 func (service *ActionService) requiresItemMutation(id string) bool {
 	handler, ok := service.handlers[id].(itemMutationHandler)
 	return ok && handler.RequiresItemMutation()
+}
+
+func (service *ActionService) playerActionAllowed(id string) bool {
+	definition, exists := service.definitions.Get(id)
+	return !exists || definition.PlayerAvailable()
+}
+
+func actionDurationTicks(world *ecs.World, definition *actiondefs.Definition) uint32 {
+	if definition.Execution.WindupMs == 0 {
+		return uint32(definition.Execution.Ticks)
+	}
+	clock := ecs.GetResource[ecs.TimeState](world)
+	seconds := clock.Delta
+	if seconds <= 0 {
+		seconds = .1
+	}
+	return uint32(math.Max(1, math.Ceil(float64(definition.Execution.WindupMs)/(seconds*1000))))
 }

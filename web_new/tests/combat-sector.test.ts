@@ -207,6 +207,7 @@ test('world reset hides the sector and renderer destruction releases its resourc
   const lifecycle = { clear: noop, destroy: noop }
   const render: Render = Object.assign(Object.create(Render.prototype), {
     combatSectorPreview: f.preview, playerEntityId: 42,
+    mapContainer: new Container(), objectsContainer: new Container(), worldHudContainer: new Container(), uiContainer: new Container(),
     keyboardMovement: { reset: noop, destroy: noop },
     inputController: { setKeyboardMovementEnabled: noop, destroy: noop },
     buildGhostController: { cancel: noop, destroy: noop },

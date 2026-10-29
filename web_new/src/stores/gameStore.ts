@@ -7,6 +7,7 @@ import { CHAT_MESSAGE_LIFETIME_MS, CHAT_FADEOUT_DURATION_MS, CHAT_CLEANUP_INTERV
 import type { ConnectionState, ConnectionError } from '@/network/types'
 import { isNewerCharacterVisual, type CharacterVisualState } from '@/types/characterVisual'
 import { acceptActionAnimation, type CharacterActionAnimationState } from '@/types/actionAnimation'
+import { acceptCombatTelegraph, type CombatTelegraphState } from '@/types/combatTelegraph'
 
 export interface QuickInventoryTransfer {
   opId: number
@@ -37,6 +38,7 @@ export interface GameObjectData {
   movement?: EntityMovement
   characterVisual?: CharacterVisualState
   actionAnimation?: CharacterActionAnimationState
+  combatTelegraph?: CombatTelegraphState
   name?: string
   nameColor?: proto.NicknameColor
 }
@@ -486,6 +488,18 @@ export const useGameStore = defineStore('game', () => {
   function clearActionAnimation(entityId: number): void {
     const entity = entities.value.get(entityId)
     if (entity) delete entity.actionAnimation
+  }
+
+  function updateCombatTelegraph(entityId: number, state: CombatTelegraphState): boolean {
+    const entity = entities.value.get(entityId)
+    if (!entity || !acceptCombatTelegraph(entity.combatTelegraph, state)) return false
+    entity.combatTelegraph = state
+    return true
+  }
+
+  function clearCombatTelegraph(entityId: number): void {
+    const entity = entities.value.get(entityId)
+    if (entity) delete entity.combatTelegraph
   }
 
   function despawnEntity(entityId: number) {
@@ -1320,6 +1334,8 @@ export const useGameStore = defineStore('game', () => {
     updateCharacterVisual,
     updateActionAnimation,
     clearActionAnimation,
+    updateCombatTelegraph,
+    clearCombatTelegraph,
     despawnEntity,
     updateEntityMovement,
     setPlayerMoveMode,

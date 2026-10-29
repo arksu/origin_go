@@ -8,6 +8,7 @@ import (
 	"origin/internal/characterattrs"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
+	"origin/internal/game/behaviors/contracts"
 	netproto "origin/internal/network/proto"
 	"origin/internal/types"
 )
@@ -43,28 +44,31 @@ type meleeDamageCommit struct {
 // MeleeExecutionService owns fixed scratch buffers for one World. All methods
 // run under its shard lock. No prepared plan survives the completion call.
 type MeleeExecutionService struct {
-	world        *ecs.World
-	equipment    *CombatEquipmentResolver
-	sectors      *SectorResolver
-	creatures    *CreatureDamageService
-	objects      *ObjectDamageService
-	events       *AttackEventSequence
-	sender       attackResultSender
-	profiles     *ecs.ComponentStorage[components.CharacterProfile]
-	stats        *ecs.ComponentStorage[components.EntityStats]
-	identities   *ecs.ComponentStorage[ecs.ExternalID]
-	health       *ecs.ComponentStorage[components.EntityHealth]
-	objectHealth *ecs.ComponentStorage[components.ObjectInternalState]
-	dropped      *ecs.ComponentStorage[components.DroppedItem]
-	contacts     []SectorHit
-	commits      [MeleeMaxHits]meleeDamageCommit
-	hits         [MeleeMaxHits]netproto.AttackHit
-	count        int
-	active       bool
-	actor        types.Handle
-	actorID      types.EntityID
-	eventID      uint64
-	eventTime    int64
+	world          *ecs.World
+	equipment      *CombatEquipmentResolver
+	sectors        *SectorResolver
+	creatures      *CreatureDamageService
+	objects        *ObjectDamageService
+	events         *AttackEventSequence
+	sender         attackResultSender
+	profiles       *ecs.ComponentStorage[components.CharacterProfile]
+	stats          *ecs.ComponentStorage[components.EntityStats]
+	identities     *ecs.ComponentStorage[ecs.ExternalID]
+	health         *ecs.ComponentStorage[components.EntityHealth]
+	objectHealth   *ecs.ComponentStorage[components.ObjectInternalState]
+	dropped        *ecs.ComponentStorage[components.DroppedItem]
+	contacts       []SectorHit
+	commits        [MeleeMaxHits]meleeDamageCommit
+	hits           [MeleeMaxHits]netproto.AttackHit
+	count          int
+	active         bool
+	actor          types.Handle
+	actorID        types.EntityID
+	eventID        uint64
+	eventTime      int64
+	naturalActor   bool
+	npcAbilities   *NPCAbilityExecutor
+	damageObserver func(target, source contracts.EntityRef)
 }
 
 func NewMeleeExecutionService(w *ecs.World, equipment *CombatEquipmentResolver, sectors *SectorResolver,
@@ -148,30 +152,47 @@ func (s *MeleeExecutionService) prepare(actor types.Handle, actorID types.Entity
 	if !s.world.Alive(actor) || !hasID || identity.ID != actorID || s.world.GetHandleByEntityID(actorID) != actor || directionActionUnavailable(s.world, actor) {
 		return ErrInvalidMeleeExecution
 	}
-	if _, _, err := s.creatures.readTarget(actor); err != nil {
-		return err
-	}
-	s.eventTime = s.creatures.time.UnixMs
-	if err := s.creatures.activity.ValidateEvent(actor, actorID, s.eventTime); err != nil {
-		return err
-	}
-	stats, exists := s.stats.Get(actor)
-	if !exists || math.IsNaN(stats.Stamina) || math.IsInf(stats.Stamina, 0) || stats.Stamina < 0 || math.IsNaN(stats.Energy) || math.IsInf(stats.Energy, 0) {
-		return ErrInvalidMeleeExecution
-	}
-	strength, err := s.strength(actor)
-	if err != nil {
-		return err
-	}
-	weapon, err := s.equipment.ResolveMeleeWeapon(actor, action, strength)
-	if err != nil {
-		return err
+	var rawDamage float64
+	var err error
+	var naturalTarget ActionTarget
+	s.naturalActor = action != nil && action.rawDamage > 0
+	if s.naturalActor {
+		active, ok := ecs.GetComponent[components.ActiveGameAction](s.world, actor)
+		if !ok || active.ActionID != definition.ID || s.npcAbilities == nil || !s.npcAbilities.validActive(actor, active) {
+			return ErrInvalidMeleeExecution
+		}
+		naturalTarget = actionTarget(active)
+		rawDamage = action.rawDamage
+	} else {
+		if _, _, err := s.creatures.readTarget(actor); err != nil {
+			return err
+		}
+		s.eventTime = s.creatures.time.UnixMs
+		if err := s.creatures.activity.ValidateEvent(actor, actorID, s.eventTime); err != nil {
+			return err
+		}
+		stats, exists := s.stats.Get(actor)
+		if !exists || math.IsNaN(stats.Stamina) || math.IsInf(stats.Stamina, 0) || stats.Stamina < 0 || math.IsNaN(stats.Energy) || math.IsInf(stats.Energy, 0) {
+			return ErrInvalidMeleeExecution
+		}
+		strength, err := s.strength(actor)
+		if err != nil {
+			return err
+		}
+		weapon, err := s.equipment.ResolveMeleeWeapon(actor, action, strength)
+		if err != nil {
+			return err
+		}
+		rawDamage = weapon.RawDamage
 	}
 	s.contacts, err = s.sectors.ResolveBoundedInto(actor, aim, *definition.Sector, s.contacts[:0])
 	if err != nil {
 		return err
 	}
 	for _, contact := range s.contacts {
+		if s.naturalActor && (contact.Handle != naturalTarget.ObjectHandle || contact.EntityID != naturalTarget.ObjectID || s.npcAbilities == nil || !s.npcAbilities.lineClear(actor, contact.Handle)) {
+			continue
+		}
 		creature, eligible, err := s.eligible(contact)
 		if err != nil {
 			return err
@@ -188,9 +209,9 @@ func (s *MeleeExecutionService) prepare(actor types.Handle, actorID types.Entity
 		var commit meleeDamageCommit
 		commit.creature = creature
 		if creature {
-			commit.soft, err = s.creatures.prepareDamage(contact.Handle, weapon.RawDamage)
+			commit.soft, err = s.creatures.prepareDamage(contact.Handle, rawDamage)
 		} else {
-			commit.object, err = s.objects.prepareDamage(contact.Handle, weapon.RawDamage)
+			commit.object, err = s.objects.prepareDamage(contact.Handle, rawDamage)
 		}
 		if err != nil {
 			return err
@@ -225,13 +246,34 @@ func (s *MeleeExecutionService) abort() {
 }
 
 func (s *MeleeExecutionService) commit() {
-	s.creatures.activity.RecordPreparedEvent(s.actor, s.eventTime)
-	s.creatures.detached.RequestRecheck(s.actor, s.creatures.time.Now)
+	if !s.naturalActor {
+		s.creatures.activity.RecordPreparedEvent(s.actor, s.eventTime)
+		s.creatures.detached.RequestRecheck(s.actor, s.creatures.time.Now)
+	}
 	for i := 0; i < s.count; i++ {
 		if s.commits[i].creature {
 			s.creatures.commitDamage(s.commits[i].soft)
 		} else {
 			s.objects.commitDamage(s.commits[i].object)
+		}
+	}
+	// Deliver stimuli only after every health write is committed. The callback
+	// records/wakes AI; it must never execute an attack synchronously.
+	if s.damageObserver != nil {
+		source := contracts.EntityRef{Handle: s.actor, EntityID: s.actorID}
+		for i := 0; i < s.count; i++ {
+			commit := s.commits[i]
+			h := commit.object.target
+			alive := commit.object.result.AfterHP > 0 && !commit.object.result.EnteredDestruction
+			decreased := commit.object.result.AfterHP < commit.object.result.BeforeHP
+			if commit.creature {
+				h = commit.soft.target
+				alive = !commit.soft.result.Dead
+				decreased = commit.soft.result.After.SHP < commit.soft.result.Before.SHP || commit.soft.result.After.HHP < commit.soft.result.Before.HHP
+			}
+			if decreased && alive && s.world.Alive(h) && !ecs.ObjectDestructionPending(s.world, h) {
+				s.damageObserver(contracts.EntityRef{Handle: h, EntityID: types.EntityID(s.hits[i].TargetId)}, source)
+			}
 		}
 	}
 }
@@ -254,6 +296,7 @@ func (s *MeleeExecutionService) reset() {
 	s.contacts = s.contacts[:0]
 	s.active, s.count, s.actor, s.actorID, s.eventID = false, 0, types.InvalidHandle, 0, 0
 	s.eventTime = 0
+	s.naturalActor = false
 }
 
 // MeleeActionHandler contains only definition parameters. Weapon capabilities,
@@ -263,6 +306,7 @@ type MeleeActionHandler struct {
 	definition   *actiondefs.Definition
 	prepared     *PreparedMeleeAction
 	preparedHere bool
+	npcAbilities *NPCAbilityExecutor
 }
 
 func NewMeleeActionHandler(execution *MeleeExecutionService, definition *actiondefs.Definition, prepared *PreparedMeleeAction) (*MeleeActionHandler, error) {
@@ -277,6 +321,13 @@ func (h *MeleeActionHandler) UnavailableReason(w *ecs.World, _ types.EntityID, a
 	if w != h.execution.world {
 		return "ACTION_UNAVAILABLE"
 	}
+	if h.prepared.rawDamage > 0 {
+		id, ok := w.GetExternalID(actor)
+		if !ok || h.npcAbilities == nil || !h.npcAbilities.actorAllowed(contracts.EntityRef{Handle: actor, EntityID: id}, h.definition.ID) {
+			return "ACTION_UNAVAILABLE"
+		}
+		return ""
+	}
 	strength, err := h.execution.strength(actor)
 	if err != nil {
 		return "ACTION_UNAVAILABLE"
@@ -285,7 +336,10 @@ func (h *MeleeActionHandler) UnavailableReason(w *ecs.World, _ types.EntityID, a
 	return meleeFailureReason(err)
 }
 
-func (h *MeleeActionHandler) ValidateTarget(_ *ecs.World, _ types.EntityID, _ types.Handle, target ActionTarget) string {
+func (h *MeleeActionHandler) ValidateTarget(w *ecs.World, id types.EntityID, actor types.Handle, target ActionTarget) string {
+	if h.prepared.rawDamage > 0 && (w != h.execution.world || h.npcAbilities == nil || !h.npcAbilities.targetAllowed(contracts.EntityRef{Handle: actor, EntityID: id}, contracts.EntityRef{Handle: target.ObjectHandle, EntityID: target.ObjectID})) {
+		return "ACTION_INVALID_TARGET"
+	}
 	if !validActionAim(target.AimAngle) {
 		return "ACTION_INVALID_TARGET"
 	}
@@ -302,6 +356,12 @@ func (*MeleeActionHandler) Cancel(*ecs.World, types.EntityID, types.Handle, comp
 func (h *MeleeActionHandler) PrepareCompletion(w *ecs.World, id types.EntityID, actor types.Handle, target ActionTarget, _ uint64) string {
 	if w != h.execution.world || h.execution.active {
 		return "ACTION_COMBAT_BUSY"
+	}
+	if h.prepared.rawDamage > 0 {
+		active, ok := ecs.GetComponent[components.ActiveGameAction](w, actor)
+		if !ok || h.npcAbilities == nil || !h.npcAbilities.validActive(actor, active) {
+			return "ACTION_UNAVAILABLE"
+		}
 	}
 	h.preparedHere = true
 	err := h.execution.prepare(actor, id, h.definition, h.prepared, target.AimAngle)
@@ -328,4 +388,10 @@ func meleeFailureReason(err error) string {
 		return "ACTION_REQUIRES_EQUIPMENT"
 	}
 	return "ACTION_COMBAT_BUSY"
+}
+
+// SetDamageObserver installs a shard-local record-and-wake hook. It runs after
+// the complete batch's health commits and before quarantine notification.
+func (s *MeleeExecutionService) SetDamageObserver(observer func(target, source contracts.EntityRef)) {
+	s.damageObserver = observer
 }

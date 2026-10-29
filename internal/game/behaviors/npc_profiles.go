@@ -14,9 +14,13 @@ import (
 const npcCandidateAttempts = contracts.NPCCandidateLimit
 
 type NPCObservedEntity struct {
-	Ref      contracts.EntityRef
-	Position contracts.NPCPoint
-	Valid    bool
+	Ref           contracts.EntityRef
+	Position      contracts.NPCPoint
+	Valid         bool
+	Moving        bool
+	HP            float64
+	HasHP         bool
+	Incapacitated bool
 }
 type NPCObservation struct {
 	Actor                contracts.EntityRef
@@ -26,9 +30,17 @@ type NPCObservation struct {
 	Moving               bool
 	Target               NPCObservedEntity
 	Ability              contracts.NPCAbilityState
+	AbilityTarget        NPCObservedEntity
 	LastResult           contracts.NPCExecutionStatus
 	ActivityDeadlineTick uint64
 	NextDecisionTick     uint64
+	HP, MaxHP            float64
+	HasHP                bool
+	DamageRevision       uint64
+	NearbyPlayer         NPCObservedEntity
+	Encounter            NPCObservedEntity
+	PerceptionKnown      bool
+	AvailableAbility     contracts.NPCAbilityAvailabilityState
 }
 type NPCDecision struct {
 	State            components.NPCPolicyState
@@ -49,6 +61,9 @@ type NPCProfile struct {
 	Init          NPCPolicy
 	Decide        NPCPolicy
 	OnResult      NPCResultPolicy
+	// PerceptionRadius is a bounded center-distance query in world coordinates.
+	PerceptionRadius            float64
+	RequiresAbilityAvailability bool
 }
 type NPCCapability struct {
 	ID               string
@@ -102,7 +117,7 @@ func NewNPCCatalog(profiles []NPCProfile, capabilities []NPCCapability, abilitie
 }
 
 var defaultNPCCatalog = func() *NPCCatalog {
-	c, err := NewNPCCatalog(nil, nil, nil)
+	c, err := NewNPCCatalog([]NPCProfile{cautiousDefenderProfile()}, nil, []contracts.NPCAbilityDefinition{{ID: "fox_bite", TargetKind: contracts.NPCTargetEntity, OwnsMovement: true}})
 	if err != nil {
 		panic(err)
 	}

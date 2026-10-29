@@ -28,9 +28,24 @@ Both actions require an item tagged `axe` in either `right_hand` or `left_hand`,
 
 Combat actions cannot declare a cursor, approach, or either repetition flag as true. Combat fields are not accepted on ordinary actions.
 
+## Natural NPC attacks
+
+`audience` defaults to `player`. Actions with `audience: "npc"` are server-only:
+they are omitted from the player catalog and rejected by player activation paths.
+`fox_bite` uses `combat.rawDamage: 6` instead of an equipment damage source or
+multiplier, and `execution.windupMs: 400` instead of a fixed tick count. Natural
+sources cannot mix equipment/skill requirements or stamina costs. The shared
+cycle converts windup milliseconds to whole ticks and skips its creation tick.
+
+The NPC adapter captures a confirmed aggressor and facing, validates the actor
+and standing target every cycle, and uses common sectors, armor, batch damage,
+cooldown and notifications. A miss starts the configured cooldown; cancellation
+before impact does not. Repeated bites are separate executions, not automatic
+`execution.repeat` cycles. See [NPC AI](../../docs/features/npc_ai.md).
+
 ## Server equipment parameters
 
-`requirements.equipment[].damageSource` is an optional server-only boolean, defaulting to `false`. The loader rejects multiple marked requirements and markers on noncombat actions. Preparing a melee action requires exactly one marked requirement with an `itemKey` or `itemTag` selector and distinct valid `slots`. Both existing axe actions mark their weapon requirement; the other requirements still control action availability. The marker is not included in protobuf or the client catalog.
+`requirements.equipment[].damageSource` is an optional server-only boolean, defaulting to `false`. The loader rejects multiple marked requirements and markers on noncombat actions. Preparing an equipment-sourced melee action requires exactly one marked requirement with an `itemKey` or `itemTag` selector and distinct valid `slots`. Both existing axe actions mark their weapon requirement; the other requirements still control action availability. The marker is not included in protobuf or the client catalog.
 
 The generic equipment resolver selects only equipped items with the `melee` capability that match the source selector and slots. It calculates `Draw` for each candidate using the supplied effective STR, instance Quality, definition base damage and action multiplier. The greatest Draw wins; equal Draw is resolved by the smaller ItemID. Weapon kinds such as axes, swords, knives and pikes use the same calculation; bows have no melee capability unless explicitly defined with one. Equipped items with `armor` contribute independently, including items that also have `melee`.
 

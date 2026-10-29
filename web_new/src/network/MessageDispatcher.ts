@@ -83,6 +83,7 @@ export class MessageDispatcher {
     if (message.objectSpawnBatch) return 'objectSpawnBatch'
     if (message.characterVisual) return 'characterVisual'
     if (message.characterActionAnimation) return 'characterActionAnimation'
+    if (message.combatTelegraph) return 'combatTelegraph'
     if (message.objectDespawn) return 'objectDespawn'
     if (message.objectMove) return 'objectMove'
     if (message.objectMoveBatch) return 'objectMoveBatch'

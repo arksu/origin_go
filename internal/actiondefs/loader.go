@@ -146,6 +146,12 @@ func loadCombatFields(input *definitionInput, sections map[string]json.RawMessag
 }
 
 func validateDefinition(definition *Definition) error {
+	if definition.Audience == "" {
+		definition.Audience = AudiencePlayer
+	}
+	if definition.Audience != AudiencePlayer && definition.Audience != AudienceNPC {
+		return fmt.Errorf("unknown audience %q", definition.Audience)
+	}
 	definition.ID = strings.TrimSpace(definition.ID)
 	definition.Presentation.Label = strings.TrimSpace(definition.Presentation.Label)
 	definition.Presentation.MenuIcon = strings.TrimSpace(definition.Presentation.MenuIcon)
@@ -237,6 +243,9 @@ func validateDefinition(definition *Definition) error {
 
 func validateCombatDefinition(definition *Definition) error {
 	if definition.Target.Kind != TargetDirection {
+		if definition.Execution.WindupMs != 0 || definition.Audience == AudienceNPC {
+			return fmt.Errorf("NPC audience and windupMs require combat")
+		}
 		if definition.Sector != nil || definition.Combat != nil {
 			return fmt.Errorf("combat fields require a direction target")
 		}
@@ -251,7 +260,7 @@ func validateCombatDefinition(definition *Definition) error {
 	if definition.Execution.Repeat || definition.Repeatable() {
 		return fmt.Errorf("combat cannot repeat")
 	}
-	if definition.Execution.Ticks <= 0 {
+	if definition.Execution.Ticks <= 0 && definition.Execution.WindupMs == 0 {
 		return fmt.Errorf("combat requires positive execution.ticks")
 	}
 	sector := definition.Sector
@@ -262,10 +271,20 @@ func validateCombatDefinition(definition *Definition) error {
 		return fmt.Errorf("sector angle must be finite and in (0, 2*pi]")
 	}
 	combat := definition.Combat
+	if definition.Execution.WindupMs > 0 && (definition.Audience != AudienceNPC || definition.Execution.Ticks != 0) {
+		return fmt.Errorf("execution.windupMs requires NPC combat and cannot combine with ticks")
+	}
+	if combat.RawDamage != nil {
+		if definition.Audience != AudienceNPC || !positiveFinite(*combat.RawDamage) || combat.DamageMultiplier != 0 || len(definition.Requirements.Equipment) != 0 || len(definition.Requirements.Skills) != 0 || definition.Execution.Stamina != 0 {
+			return fmt.Errorf("natural combat requires NPC audience, positive rawDamage and no equipment, skills, multiplier or stamina")
+		}
+	} else if definition.Audience == AudienceNPC {
+		return fmt.Errorf("NPC combat requires natural rawDamage")
+	}
 	if combat.HitMode != HitAll && combat.HitMode != HitNearest {
 		return fmt.Errorf("combat.hitMode must be all or nearest")
 	}
-	if math.IsNaN(combat.DamageMultiplier) || math.IsInf(combat.DamageMultiplier, 0) || combat.DamageMultiplier <= 0 {
+	if combat.RawDamage == nil && !positiveFinite(combat.DamageMultiplier) {
 		return fmt.Errorf("combat.damageMultiplier must be positive and finite")
 	}
 	return nil
@@ -276,4 +295,8 @@ func validIconPath(icon string) bool {
 		return false
 	}
 	return path.Clean(icon) == icon && icon != "/assets/"
+}
+
+func positiveFinite(value float64) bool {
+	return value > 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
 }

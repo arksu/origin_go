@@ -27,6 +27,7 @@ import { SHALLOW_WATER } from './actors/shallowWaterConfig'
 import { TILE_SHALLOW_WATER } from './tiles/tileIds'
 import type { EquippedVisual } from '../types/characterVisual'
 import { actionAnimationPhase, type CharacterActionAnimationState } from '../types/actionAnimation'
+import type { CombatTelegraphState } from '../types/combatTelegraph'
 import { fxManager } from './fx/FxManager'
 import type { ParticleEmitter } from './fx/ParticleEmitter'
 import type { LocalAudioSnapshot } from './LocalAudioController'
@@ -60,6 +61,7 @@ export interface ObjectViewOptions {
   position: { x: number; y: number; heading?: number }
   size: { x: number; y: number }
   actionAnimation?: CharacterActionAnimationState
+  combatTelegraph?: CombatTelegraphState
 }
 
 /**

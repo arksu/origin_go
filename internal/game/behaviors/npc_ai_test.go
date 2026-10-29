@@ -104,7 +104,7 @@ func npcFixture(t *testing.T) (*ecs.World, types.Handle, npcTestChunks) {
 	ts := ecs.GetResource[ecs.TimeState](w)
 	ts.TickPeriod = 100 * time.Millisecond
 	chunks := npcTestChunks{{}: npcTestLand(t, types.ChunkCoord{})}
-	_, err := AttachNPCController(w, NPCControllerConfig{Chunks: chunks})
+	_, err := AttachNPCController(w, NPCControllerConfig{Chunks: chunks, Abilities: newNPCExtensionExecutor(w)})
 	require.NoError(t, err)
 	h := w.Spawn(100, func(w *ecs.World, h types.Handle) {
 		ecs.AddComponent(w, h, components.EntityInfo{TypeID: 42, Transient: true, Behaviors: []string{npcAIKey}})
@@ -232,7 +232,7 @@ func TestNPCControllerRequiresExplicitDependencies(t *testing.T) {
 	_, err = AttachNPCController(w, NPCControllerConfig{Chunks: nilChunks})
 	require.Error(t, err)
 	chunks := npcTestChunks{{}: npcTestLand(t, types.ChunkCoord{})}
-	controller, err := AttachNPCController(w, NPCControllerConfig{Chunks: chunks})
+	controller, err := AttachNPCController(w, NPCControllerConfig{Chunks: chunks, Abilities: newNPCExtensionExecutor(w)})
 	require.NoError(t, err)
 	require.Same(t, controller, ecs.GetResource[NPCController](w))
 	require.Same(t, controller, ecs.GetResource[contracts.NPCLifecycle](w).Controller)

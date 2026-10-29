@@ -1,4 +1,8 @@
 import type { CharacterActionAnimationState } from '../types/actionAnimation'
+import type { CombatTelegraphState } from '../types/combatTelegraph'
+import { CombatTelegraphPreview } from './CombatTelegraphPreview'
+import { cameraController } from './CameraController'
+import { timeSync } from '../network/TimeSync'
 import { Container, type Texture } from 'pixi.js'
 import { ObjectView, type ObjectViewOptions } from './ObjectView'
 import { cullingController } from './culling'
@@ -17,6 +21,7 @@ import type { LightingManager } from './lighting/LightingManager'
 export class ObjectManager {
   private parentContainer: Container | null = null
   private objects: Map<number, ObjectView> = new Map()
+  private combatTelegraphs = new Map<number, CombatTelegraphPreview>()
   private animatedObjectIds: Set<number> = new Set()
   private carriedByByObject: Map<number, number> = new Map()
   private carriedObjectsByCarrier: Map<number, Set<number>> = new Map()
@@ -82,6 +87,7 @@ export class ObjectManager {
       this.animatedObjectIds.add(options.entityId)
     }
     this.parentContainer!.addChild(objectView.getContainer())
+    this.setCombatTelegraph(options.entityId, options.combatTelegraph ?? null)
 
     const light = objectView.getLightDefinition()
     if (light) this.lightingManager?.register(options.entityId, objectView.getContainer(), light)
@@ -107,6 +113,7 @@ export class ObjectManager {
    * Despawn an object.
    */
   despawnObject(entityId: number): void {
+    this.setCombatTelegraph(entityId, null)
     const carriedSet = this.carriedObjectsByCarrier.get(entityId)
     if (carriedSet && carriedSet.size > 0) {
       for (const carriedObjectId of Array.from(carriedSet)) {
@@ -409,6 +416,19 @@ export class ObjectManager {
     this.objects.get(entityId)?.setActionAnimation(state)
   }
 
+  setCombatTelegraph(entityId: number, state: CombatTelegraphState | null): void {
+    this.combatTelegraphs.get(entityId)?.destroy()
+    this.combatTelegraphs.delete(entityId)
+    const origin = this.objects.get(entityId)?.getContainer()
+    if (!state?.active || !origin || !this.parentContainer) return
+    const preview = new CombatTelegraphPreview(this.parentContainer, state)
+    if (preview.update(origin, cameraController.getZoom(), timeSync.estimateServerNowMs())) {
+      this.combatTelegraphs.set(entityId, preview)
+    } else {
+      preview.destroy()
+    }
+  }
+
   update(nowMs = performance.now(), serverNowMs = Date.now()): void {
     localAudioController.setListenerPosition(this.playerEntityId === null ? null : this.objects.get(this.playerEntityId)?.getPosition() ?? null)
     if (this.animatedObjectIds.size > 0) {
@@ -439,6 +459,15 @@ export class ObjectManager {
     if (this.needsSort) {
       this.sortByDepth()
       this.needsSort = false
+    }
+    if (this.combatTelegraphs.size > 0) {
+      const zoom = cameraController.getZoom()
+      for (const [entityId, preview] of this.combatTelegraphs) {
+        if (!preview.update(this.objects.get(entityId)?.getContainer(), zoom, serverNowMs)) {
+          preview.destroy()
+          this.combatTelegraphs.delete(entityId)
+        }
+      }
     }
   }
 
@@ -491,6 +520,8 @@ export class ObjectManager {
    * Clear all objects.
    */
   clear(): void {
+    for (const preview of this.combatTelegraphs.values()) preview.destroy()
+    this.combatTelegraphs.clear()
     localAudioController.reset()
     this.clearHover()
 

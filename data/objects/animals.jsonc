@@ -15,7 +15,22 @@
       },
       "behaviors": {
         "npc_ai": {
-          "profile": "passive_wander",
+          "profile": "cautious_defender",
+          "abilities": ["fox_bite"],
+          "params": {
+            "noticeRadiusTiles": 4,
+            "watchMinSeconds": 2,
+            "watchMaxSeconds": 4,
+            "retreatProbability": 0.15,
+            "retreatTriggerTiles": 1.5,
+            "retreatDistanceTiles": 3,
+            "rearmRadiusTiles": 6,
+            "rearmSeconds": 5,
+            "defenseRadiusTiles": 6,
+            "defenseHomeRadiusTiles": 12,
+            "lowHPFraction": 0.25,
+            "chaseFailureSeconds": 3
+          },
           "speed": 32,
           "idleMinSeconds": 8,
           "idleMaxSeconds": 16,

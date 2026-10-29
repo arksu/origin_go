@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "actions": [{
+    "id": "fox_bite",
+    "audience": "npc",
+    "presentation": { "label": "Bite", "menuIcon": "/assets/cursor/atk.png" },
+    "target": { "kind": "direction" },
+    "requirements": {},
+    "execution": { "windupMs": 400 },
+    "cooldown": 1500,
+    "sector": { "range": 12, "angleDeg": 60 },
+    "combat": { "hitMode": "nearest", "rawDamage": 6 }
+  }]
+}

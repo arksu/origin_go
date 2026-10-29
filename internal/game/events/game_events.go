@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"origin/internal/charactervisual"
+	"origin/internal/combatpresentation"
 	constt "origin/internal/const"
 	"origin/internal/cyclicaction"
 	"origin/internal/ecs"
@@ -295,6 +296,7 @@ func (d *NetworkVisibilityDispatcher) buildObjectSpawn(w *ecs.World, entityID ty
 		CarriedByEntityId: carryVisualCarrierIDForHandle(w, handle),
 		CharacterVisual:   visual,
 		ActionAnimation:   animation,
+		CombatTelegraph:   combatpresentation.Snapshot(w, handle),
 		Position: &netproto.EntityPosition{
 			Position: &netproto.Position{X: int32(transform.X), Y: int32(transform.Y), Heading: float32(transform.Direction)},
 			Size:     size,
@@ -340,7 +342,7 @@ func (d *NetworkVisibilityDispatcher) sendObjectSpawns(shard *game.Shard, observ
 	critical := false
 	for _, spawn := range spawns {
 		spawn.StreamEpoch = epoch
-		critical = critical || spawn.ActionAnimation != nil
+		critical = critical || spawn.ActionAnimation != nil || spawn.CombatTelegraph != nil
 	}
 	message := &netproto.ServerMessage{}
 	if len(spawns) == 1 {

@@ -1,6 +1,7 @@
 package systems
 
 import (
+	constt "origin/internal/const"
 	"origin/internal/ecs"
 	"origin/internal/ecs/components"
 	"origin/internal/game/behaviors/contracts"
@@ -34,7 +35,7 @@ func NewBehaviorTickSystem(logger *zap.Logger, cfg BehaviorTickSystemConfig) *Be
 		logger = zap.NewNop()
 	}
 	if cfg.BudgetPerTick <= 0 {
-		cfg.BudgetPerTick = 200
+		cfg.BudgetPerTick = constt.DefaultBehaviorTickBudget
 	}
 
 	return &BehaviorTickSystem{

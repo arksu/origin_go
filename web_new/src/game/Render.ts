@@ -33,6 +33,7 @@ import { DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRe
 import type { EquippedVisual } from '../types/characterVisual'
 import type { LyingPresentationMode } from './actors/lyingPresentation'
 import type { CharacterActionAnimationState } from '../types/actionAnimation'
+import type { CombatTelegraphState } from '../types/combatTelegraph'
 import type { ObjectViewOptions } from './ObjectView'
 import type { ChunkEventIdentity } from '../network/ChunkStreamGuard'
 import { MinimapRenderer } from './minimap/MinimapRenderer'
@@ -746,6 +747,10 @@ export class Render {
 
   setActionAnimation(entityId: number, state: CharacterActionAnimationState | null): void {
     this.objectManager.setActionAnimation(entityId, state)
+  }
+
+  setCombatTelegraph(entityId: number, state: CombatTelegraphState | null): void {
+    this.objectManager.setCombatTelegraph(entityId, state)
   }
 
   spawnObject(options: ObjectViewOptions): void {

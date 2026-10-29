@@ -8,6 +8,7 @@ import type { ArmLiftGhostOptions } from './LiftGhostController'
 import type { EquippedVisual } from '../types/characterVisual'
 import type { LyingPresentationMode } from './actors/lyingPresentation'
 import type { CharacterActionAnimationState } from '../types/actionAnimation'
+import type { CombatTelegraphState } from '../types/combatTelegraph'
 import type { ObjectViewOptions } from './ObjectView'
 import { DEFAULT_ACTOR_RENDER_SETTINGS, resolveActorRenderSettings, type ActorRenderSettings } from './actors/config'
 import { config } from '@/config'
@@ -208,6 +209,10 @@ export class GameFacade {
 
   setActionAnimation(entityId: number, state: CharacterActionAnimationState | null): void {
     this.render?.setActionAnimation(entityId, state)
+  }
+
+  setCombatTelegraph(entityId: number, state: CombatTelegraphState | null): void {
+    this.render?.setCombatTelegraph(entityId, state)
   }
 
   spawnObject(options: ObjectViewOptions): void {

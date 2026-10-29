@@ -128,11 +128,20 @@ func TestProductionActionsMatchRegisteredHandlers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.All()) != 7 {
-		t.Fatalf("expected four existing actions, two axe actions and Hearth return, got %d", len(registry.All()))
+	if len(registry.All()) != 8 {
+		t.Fatalf("expected seven player actions and NPC fox bite, got %d", len(registry.All()))
 	}
 	if err := registry.ValidateHandlers([]string{"lift", "lift_down", "plow_tile", "dig", "travel_to_hearth_fire"}); err != nil {
 		t.Fatal(err)
+	}
+	bite, exists := registry.Get("fox_bite")
+	if !exists || bite.Audience != AudienceNPC || bite.PlayerAvailable() || bite.Combat == nil || bite.Combat.RawDamage == nil || *bite.Combat.RawDamage != 6 || bite.Execution.WindupMs != 400 || bite.Cooldown != 1500 {
+		t.Fatalf("invalid NPC-only fox bite: %#v", bite)
+	}
+	for _, definition := range registry.All() {
+		if definition.ID != "fox_bite" && !definition.PlayerAvailable() {
+			t.Fatalf("player action %q lost its audience", definition.ID)
+		}
 	}
 	for _, id := range []string{"lift", "lift_down"} {
 		definition, exists := registry.Get(id)

@@ -642,7 +642,7 @@ try {
   await nextTick()
   assert.deepEqual(tooltipTexts(), [], 'touch dragging also removes the menu tooltip')
   menuLift.props.onPointerup({ ...pointer, pointerType: 'touch', pointerId: 42, clientX: 40 })
-  const originalWindow = globalThis.window
+  const tooltipOriginalWindow = globalThis.window
   const longPressTimers = new Map()
   const resizeListeners = new Set()
   globalThis.window = {
@@ -697,8 +697,8 @@ try {
     assert.deepEqual(tooltipTexts(), [])
     assert.equal(longPressTimers.size, 0)
   } finally {
-    if (originalWindow === undefined) delete globalThis.window
-    else globalThis.window = originalWindow
+    if (tooltipOriginalWindow === undefined) delete globalThis.window
+    else globalThis.window = tooltipOriginalWindow
   }
   menuLift.props.onPointerenter(pointer)
   tooltipSlots[0].props.onPointerenter(pointer)

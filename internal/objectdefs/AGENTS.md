@@ -145,12 +145,12 @@ The unified runtime registry (`internal/game/behaviors.DefaultRegistry()`) regis
 - `tree` — Tree behavior (chopping, wood resource)
 - `container` — Container behavior (storage)
 - `player` — Player behavior (character control)
-- `npc_ai` — Shared NPC decision behavior, initially `passive_wander`; parameters
+- `npc_ai` — Shared NPC decision behavior (`passive_wander`, `cautious_defender`); parameters
   are immutable def content and per-instance state lives in one transient NPCBrain.
   The same immutable NPC catalog validates profiles, capabilities and ability
   references before runtime. Optional profile params compile at load time; unknown
-  capabilities/abilities are rejected. Production currently enables passive
-  locomotion only, without NPC combat abilities.
+  capabilities/abilities are rejected. Production foxes combine locomotion and
+  the NPC-only `fox_bite` through the shared action/combat executor.
 
 ## Integration Points
 

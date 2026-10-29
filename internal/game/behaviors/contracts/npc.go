@@ -10,6 +10,10 @@ import (
 // JSON validated at load time; it is not an interpreted behavior program.
 type NPCProfileParameters interface{ NPCProfileParameters() }
 
+// Shared action admission reads this compiled policy value rather than copying
+// the defender's retreat threshold into the combat runtime.
+type NPCCombatHealthPolicy interface{ MinimumCombatHealthFraction() float64 }
+
 type NPCBehaviorConfig struct {
 	Priority        int                  `json:"priority,omitempty"`
 	Profile         string               `json:"profile"`
@@ -59,6 +63,7 @@ const (
 	NPCIntentStop
 	NPCIntentUseAbility
 	NPCIntentCancelAbility
+	NPCIntentFace
 )
 const NPCCandidateLimit = 4
 
@@ -73,6 +78,7 @@ type NPCIntent struct {
 	Kind    NPCIntentKind
 	Move    NPCMoveIntent
 	Ability NPCAbilityRequest
+	Face    NPCPoint
 	// CancelGeneration identifies the observed execution to interrupt.
 	CancelGeneration uint64
 }
@@ -128,6 +134,17 @@ type NPCAbilityExecutor interface {
 	TryStart(NPCAbilityRequest) NPCAbilityState
 	Cancel(EntityRef, uint64, NPCRetireReason) NPCAbilityState
 	State(EntityRef, uint64) NPCAbilityState
+}
+
+// Availability is optional for executors serving profiles without combat.
+// Ready includes admission/cooldown checks but excludes distance; Range comes
+// from the same compiled action definition used by hit resolution.
+type NPCAbilityAvailabilityState struct {
+	Range float64
+	Ready bool
+}
+type NPCAbilityAvailability interface {
+	Availability(EntityRef, string, NPCTarget) NPCAbilityAvailabilityState
 }
 type NPCRetireReason uint8
 

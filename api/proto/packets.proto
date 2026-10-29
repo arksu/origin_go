@@ -640,6 +640,7 @@ message S2C_ObjectSpawn {
   string name = 8; // display name; empty for unnamed entities (objects, items)
   NicknameColor name_color = 9;
   CharacterActionAnimationState action_animation = 10;
+  CombatTelegraphState combat_telegraph = 11;
 }
 
 message S2C_ObjectSpawnBatch {
@@ -936,6 +937,28 @@ message S2C_AttackResult {
   repeated AttackHit hits = 4; // Each hit target appears once, including zero-damage hits.
 }
 
+// Public warning for one accepted attack. An inactive state retains its revision.
+// generation identifies the actor incarnation, independently of action execution.
+message CombatTelegraphState {
+  string generation = 1;
+  uint64 revision = 2;
+  uint64 execution_generation = 3;
+  bool active = 4;
+  uint32 total_ticks = 5;
+  uint32 elapsed_ticks = 6;
+  double tick_duration_ms = 7;
+  int64 server_time_ms = 8;
+  float facing_angle = 9;
+  float range = 10;
+  float angle = 11;
+}
+
+message S2C_CombatTelegraph {
+  uint64 entity_id = 1;
+  CombatTelegraphState state = 2;
+  uint32 stream_epoch = 3;
+}
+
 message S2C_Sound {
   string sound_key = 1;
   double x = 2;
@@ -1040,6 +1063,7 @@ message ServerMessage {
     S2C_ServerConstants server_constants = 53;
     S2C_CustomWindow custom_window = 54;
     S2C_CustomWindowClosed custom_window_closed = 55;
+    S2C_CombatTelegraph combat_telegraph = 56;
 
     //    S2C_EntityUpdate entity_update = 15;
     //    S2C_PlayerStateUpdate player_state = 16;

@@ -6,6 +6,8 @@ import { DEBUG_MOVEMENT } from '@/constants/game'
 import { initializeAudio, localAudioController, worldAudioReceiver } from '@/game/audioRuntime'
 import { decodeCharacterVisual } from '@/types/characterVisual'
 import { decodeActionAnimation } from '@/types/actionAnimation'
+import { acceptCombatTelegraph, decodeCombatTelegraph } from '@/types/combatTelegraph'
+import { decodeNonzeroUint64 } from '@/types/networkIdentity'
 import { serverConstants } from './ServerConstants'
 import { gameConnection } from './GameConnection'
 import { ChunkStreamGuard } from './ChunkStreamGuard'
@@ -265,18 +267,29 @@ export function registerMessageHandlers(): void {
 
     const characterVisual = msg.characterVisual ? decodeCharacterVisual(msg.characterVisual) : undefined
     const actionAnimation = msg.actionAnimation ? decodeActionAnimation(msg.actionAnimation) : undefined
+    const combatTelegraph = msg.combatTelegraph ? decodeCombatTelegraph(msg.combatTelegraph) : undefined
     if (actionAnimation && actionAnimation.generation !== characterVisual?.generation) throw new Error('Spawn action animation incarnation mismatch')
+    if (combatTelegraph && characterVisual && combatTelegraph.generation !== characterVisual.generation) throw new Error('Spawn combat telegraph incarnation mismatch')
     const existing = gameStore.entities.get(entityId)
-    if (characterVisual && existing?.characterVisual?.generation === characterVisual.generation && existing.resourcePath === resourcePath && existing.typeId === (msg.typeId || 0)) {
+    const sameIncarnation = characterVisual
+      ? existing?.characterVisual?.generation === characterVisual.generation
+      : combatTelegraph !== undefined && existing?.combatTelegraph?.generation === combatTelegraph.generation
+    if (existing && sameIncarnation && existing.resourcePath === resourcePath && existing.typeId === (msg.typeId || 0)) {
       existing.position.heading = heading
       moveController.refreshHeading(entityId, heading)
       gameFacade.setObjectHeading(entityId, heading)
-      if (gameStore.updateCharacterVisual(entityId, characterVisual)) applyCharacterVisual(entityId, characterVisual, 'snapshot')
+      if (characterVisual && gameStore.updateCharacterVisual(entityId, characterVisual)) applyCharacterVisual(entityId, characterVisual, 'snapshot')
       if (actionAnimation) {
         if (gameStore.updateActionAnimation(entityId, actionAnimation)) gameFacade.setActionAnimation(entityId, actionAnimation)
       } else {
         gameStore.clearActionAnimation(entityId)
         gameFacade.setActionAnimation(entityId, null)
+      }
+      if (combatTelegraph) {
+        if (gameStore.updateCombatTelegraph(entityId, combatTelegraph)) gameFacade.setCombatTelegraph(entityId, combatTelegraph)
+      } else {
+        gameStore.clearCombatTelegraph(entityId)
+        gameFacade.setCombatTelegraph(entityId, null)
       }
       // A respawn of a known entity still re-carries its name: apply it even
       // though the visual snapshot is unchanged.
@@ -294,6 +307,10 @@ export function registerMessageHandlers(): void {
       resourcePath,
       characterVisual,
       actionAnimation,
+      // A resource change can replace the view without changing incarnation.
+      // Keep its accepted transition watermark instead of replaying a stale snapshot.
+      combatTelegraph: combatTelegraph && existing?.combatTelegraph?.generation === combatTelegraph.generation &&
+        !acceptCombatTelegraph(existing.combatTelegraph, combatTelegraph) ? existing.combatTelegraph : combatTelegraph,
       name: displayName,
       nameColor,
       position: { x: posX, y: posY, heading },
@@ -353,6 +370,17 @@ export function registerMessageHandlers(): void {
     const entityId = toNumber(msg.entityId || 0)
     const state = decodeActionAnimation(msg.state)
     if (gameStore.updateActionAnimation(entityId, state)) gameFacade.setActionAnimation(entityId, state)
+  })
+
+  messageDispatcher.on('combatTelegraph', (msg: proto.IS2C_CombatTelegraph) => {
+    const epoch = gameStore.worldParams?.streamEpoch
+    if (!gameStore.isInGame || !epoch || msg.streamEpoch !== epoch || !msg.state) return
+    const identity = decodeNonzeroUint64(msg.entityId)
+    if (!identity) return
+    const entityId = Number(identity)
+    if (!Number.isSafeInteger(entityId)) return
+    const state = decodeCombatTelegraph(msg.state)
+    if (gameStore.updateCombatTelegraph(entityId, state)) gameFacade.setCombatTelegraph(entityId, state)
   })
 
   messageDispatcher.on('objectDespawn', (msg: proto.IS2C_ObjectDespawn) => {

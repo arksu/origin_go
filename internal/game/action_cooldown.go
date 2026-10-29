@@ -47,6 +47,9 @@ func (service *ActionService) cooldownSnapshot(world *ecs.World, player types.Ha
 	now := ecs.GetResource[ecs.TimeState](world).UnixMs
 	var snapshot []*netproto.ActionCooldown
 	for _, definition := range service.definitions.All() {
+		if !definition.PlayerAvailable() {
+			continue
+		}
 		if cooldown := cooldowns.ByAction[definition.ID]; cooldown.ExpiresAtMs > now {
 			snapshot = append(snapshot, &netproto.ActionCooldown{ActionId: definition.ID, StartedAtMs: cooldown.StartedAtMs, ExpiresAtMs: cooldown.ExpiresAtMs})
 		}

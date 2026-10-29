@@ -25,8 +25,15 @@ import (
 )
 
 func newNPCProductionShard(t testing.TB, capacity int) (*Shard, *objectdefs.ObjectDef, *behaviors.Registry) {
+	return newNPCProductionShardSize(t, capacity, 1)
+}
+
+func newNPCProductionShardSize(t testing.TB, capacity, worldChunks int, prepareItems ...func()) (*Shard, *objectdefs.ObjectDef, *behaviors.Registry) {
 	t.Helper()
 	def, registry := loadNPCFoxCatalog(t)
+	for _, prepare := range prepareItems {
+		prepare()
+	}
 	logger := zap.NewNop()
 	previousActions, previousSounds := actiondefs.Global(), sounddefs.Global()
 	t.Cleanup(func() {
@@ -44,9 +51,9 @@ func newNPCProductionShard(t testing.TB, capacity int) (*Shard, *objectdefs.Obje
 
 	cfg := &config.Config{Game: config.GameConfig{
 		MaxEntities: capacity, Region: 1, TickRate: 10,
-		ChunkLRUCapacity: 4, ChunkLRUTTL: 60, LoadWorkers: 1,
-		WorldWidthChunks: 1, WorldHeightChunks: 1,
-		BehaviorTickGlobalBudget: 200, BehaviorTickCatchupLimit: 10,
+		ChunkLRUCapacity: 16, ChunkLRUTTL: 60, LoadWorkers: 1,
+		WorldWidthChunks: worldChunks, WorldHeightChunks: worldChunks,
+		BehaviorTickGlobalBudget: constt.DefaultBehaviorTickBudget, BehaviorTickCatchupLimit: 10,
 		Audio: config.DefaultAudioConfig(),
 	}}
 	bus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 1})
@@ -58,14 +65,19 @@ func newNPCProductionShard(t testing.TB, capacity int) (*Shard, *objectdefs.Obje
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	require.NoError(t, shard.chunkManager.WaitPreloaded(ctx, types.ChunkCoord{}))
-	chunk := shard.chunkManager.GetChunk(types.ChunkCoord{})
 	tiles := make([]byte, constt.ChunkSize*constt.ChunkSize)
 	for i := range tiles {
 		tiles[i] = types.TileGrass
 	}
-	require.NoError(t, chunk.RestoreTiles(tiles, 0, 0))
-	chunk.SetState(types.ChunkStateActive)
+	for y := 0; y < worldChunks; y++ {
+		for x := 0; x < worldChunks; x++ {
+			coord := types.ChunkCoord{X: x, Y: y}
+			require.NoError(t, shard.chunkManager.WaitPreloaded(ctx, coord))
+			chunk := shard.chunkManager.GetChunk(coord)
+			require.NoError(t, chunk.RestoreTiles(tiles, 0, 0))
+			chunk.SetState(types.ChunkStateActive)
+		}
+	}
 
 	return shard, def, registry
 }
@@ -89,11 +101,15 @@ func TestNPCFoxWandersWithProductionShardWiring(t *testing.T) {
 
 	// Exercise the systems and dependencies installed by NewShard: hand-built
 	// behavior systems can accidentally supply dependencies missing at startup.
-	for ts.Tick <= brain.NextDecisionTick {
+	for ts.Tick <= brain.Cautious.IdleUntilTick+10 {
 		shard.Update(ts)
 		ts.Tick++
 		ts.Now = ts.Now.Add(ts.TickPeriod)
 		ts.UnixMs = ts.Now.UnixMilli()
+		movement, _ := ecs.GetComponent[components.Movement](shard.world, fox)
+		if movement.State == constt.StateMoving {
+			break
+		}
 	}
 	movement, ok := ecs.GetComponent[components.Movement](shard.world, fox)
 	require.True(t, ok)

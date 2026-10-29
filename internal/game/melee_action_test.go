@@ -612,7 +612,7 @@ func TestMeleeBootstrapAndPreparationLifecycle(t *testing.T) {
 	f := newMeleeFixture(t)
 	compiled, err := NewCombatDefinitions(itemdefs.NewRegistry(combatTestDefinitions()), f.definitions)
 	require.NoError(t, err)
-	require.Len(t, compiled.actions, 2)
+	require.Len(t, compiled.actions, 3)
 	_, err = NewCombatDefinitions(nil, f.definitions)
 	require.Error(t, err)
 	bus := eventbus.New(&eventbus.Config{MinWorkers: 1, MaxWorkers: 1})

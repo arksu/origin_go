@@ -1,5 +1,12 @@
 package actiondefs
 
+type Audience string
+
+const (
+	AudiencePlayer Audience = "player"
+	AudienceNPC    Audience = "npc"
+)
+
 type TargetKind string
 
 const (
@@ -35,9 +42,10 @@ type Requirements struct {
 }
 
 type Execution struct {
-	Ticks   int     `json:"ticks,omitempty"`
-	Stamina float64 `json:"stamina,omitempty"`
-	Repeat  bool    `json:"repeat,omitempty"`
+	WindupMs uint32  `json:"windupMs,omitempty"`
+	Ticks    int     `json:"ticks,omitempty"`
+	Stamina  float64 `json:"stamina,omitempty"`
+	Repeat   bool    `json:"repeat,omitempty"`
 }
 
 type Sector struct {
@@ -53,12 +61,14 @@ const (
 )
 
 type Combat struct {
-	HitMode          HitMode `json:"hitMode"`
-	DamageMultiplier float64 `json:"damageMultiplier"`
+	HitMode          HitMode  `json:"hitMode"`
+	DamageMultiplier float64  `json:"damageMultiplier,omitempty"`
+	RawDamage        *float64 `json:"rawDamage,omitempty"`
 }
 
 type Definition struct {
 	ID           string       `json:"id"`
+	Audience     Audience     `json:"audience,omitempty"`
 	Presentation Presentation `json:"presentation"`
 	Target       Target       `json:"target"`
 	Requirements Requirements `json:"requirements"`
@@ -73,4 +83,9 @@ type Definition struct {
 
 func (definition *Definition) Repeatable() bool {
 	return definition != nil && definition.IsRepeatable != nil && *definition.IsRepeatable
+}
+
+// PlayerAvailable preserves the audience of existing definitions that omit the field.
+func (definition *Definition) PlayerAvailable() bool {
+	return definition != nil && (definition.Audience == "" || definition.Audience == AudiencePlayer)
 }

@@ -238,7 +238,7 @@ Key configuration parameters:
 - `Game.DisconnectDelay`: Player detach time
 - `Game.WorkerPoolSize`: Event bus worker pool size
 - `Game.ObjectBehaviorBudgetPerTick`: max dirty object behavior recomputes per tick (default `512`)
-- `Game.BehaviorTickGlobalBudget`: max scheduled behavior ticks processed per tick (default `200`)
+- `Game.BehaviorTickGlobalBudget`: max scheduled behavior ticks processed per tick (default `2500`)
 - `Game.BehaviorTickCatchupLimit`: max restore catch-up transitions per object (default `2000`)
 - `Game.InteractionPendingTimeout`: pending context action lifetime before cleanup (default `15s`)
 

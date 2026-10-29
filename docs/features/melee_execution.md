@@ -40,6 +40,23 @@ source pin exactly once. Each committed destruction retains its existing separat
 transaction and retry behavior. A persistence failure never replays the attack.
 `committedDroppedActivationBudget` remains 64.
 
+## Natural NPC attacks
+
+The fox adds `fox_bite` through the same action, cycle and melee services. Its
+NPC-only audience is rejected by player entry points and omitted from public
+catalogs. Natural raw damage replaces attacker weapon/STR preparation; targets
+still use the existing armor and creature/object damage receivers. The fox keeps
+ObjectInternalState HP and has no synthetic player profile or inventory.
+
+The accepted bite fixes heading and target, advances independently of AI, and
+revalidates the actor and standing target each cycle. Its 400 ms windup skips the
+creation tick, followed by one hit or paid miss and a 1500 ms cooldown. There is
+no recovery. Only the confirmed aggressor is eligible; bounded segment/terrain
+checks prevent biting through obstacles. A newly received hit affects the next
+execution, while invalid state or low actor HP cancels the current preparation.
+A committed-damage observer runs only after all health writes; it records AI
+aggression without recursively executing another attack. See [NPC AI](npc_ai.md).
+
 ## Bounds and memory
 
 Each query permits 1,024 cells, 4,096 raw collider memberships (before
