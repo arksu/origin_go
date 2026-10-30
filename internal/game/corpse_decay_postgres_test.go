@@ -72,7 +72,7 @@ func TestCorpseDecayPostgresLootAndRestartAfterAmbiguousCommit(t *testing.T) {
 	skeleton, err := f.db.Queries().GetObjectByID(ctx, 1)
 	require.NoError(t, err)
 	require.Equal(t, 17, skeleton.TypeID)
-	require.Equal(t, int16(17), skeleton.Quality)
+	require.Equal(t, int64(17), skeleton.Quality)
 	require.Equal(t, 1279, skeleton.X)
 	oldRoots, err := f.db.Queries().GetInventoriesByOwner(ctx, 1)
 	require.NoError(t, err)

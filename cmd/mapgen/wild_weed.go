@@ -211,7 +211,7 @@ func (g *MapGenerator) writeWildWeeds(ctx context.Context, queries *repository.Q
 			if err := queries.UpsertObject(ctx, repository.UpsertObjectParams{
 				ID: int64(id), TypeID: definition.DefID, Region: g.region, Layer: spot.Layer,
 				X: point.X, Y: point.Y, ChunkX: coord.X, ChunkY: coord.Y,
-				Heading: sql.NullInt16{Valid: true}, Quality: quality,
+				Heading: sql.NullInt16{Valid: true}, Quality: int64(quality),
 				Data: pqtype.NullRawMessage{RawMessage: data, Valid: true},
 			}); err != nil {
 				return generated, fmt.Errorf("save WWW object: %w", err)

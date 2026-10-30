@@ -80,6 +80,7 @@ type Shard struct {
 	soundEvents       *SoundEventService
 	sectorResolver    *SectorResolver
 	objectDestruction *ObjectDestructionService
+	cropHarvest       *cropHarvestService
 	inventoryExecutor *inventory.InventoryExecutor
 	objectDamage      *ObjectDamageService
 	creatureDamage    *CreatureDamageService
@@ -238,6 +239,9 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	inventoryExecutor := inventory.NewInventoryExecutor(logger, entityIDManager, worldObjectPersistence, s.chunkManager, visionSystem)
 	inventoryExecutor.SetBehaviorRegistry(behaviorRegistry)
 	s.inventoryExecutor = inventoryExecutor
+	if err := s.initCropHarvest(); err != nil {
+		logger.Fatal("Invalid crop harvest service", zap.Error(err))
+	}
 
 	networkCmdSystem := systems.NewNetworkCommandSystem(s.playerInbox, s.serverInbox, s, s, inventoryExecutor, s, visionSystem, cfg.Game.ChatLocalRadius, logger)
 	networkCmdSystem.SetDirectionalSessionValidator(s.validDirectionalSession)
@@ -275,6 +279,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	})
 	contextActionService.SetCraftingService(craftingService)
 	contextActionService.SetTakeSkull(s.takeSkull)
+	contextActionService.SetCropHarvest(s.harvestCrop)
 	s.contextActions = contextActionService
 	contextActionService.SetSoundEventService(s.soundEvents)
 	s.craftingService = craftingService
@@ -312,6 +317,16 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		"plow_tile": &plowTileActionHandler{terrain: s.chunkManager},
 		"dig":       &digTileActionHandler{terrain: s.chunkManager, giveItem: giveItem},
 	}
+	var planting *plantCropActionHandler
+	if _, found := definitions.Get(plantCropActionID); found {
+		var err error
+		planting, err = newPlantCropActionHandler(s.world, s.chunkManager, entityIDManager, behaviorRegistry,
+			objectdefs.Global(), itemdefs.Global(), cfg.Game.FarmingQualityVariance, s.SendInventorySnapshots, s)
+		if err != nil {
+			logger.Fatal("Invalid crop planting configuration", zap.Error(err))
+		}
+		handlers[plantCropActionID] = planting
+	}
 	if _, found := definitions.Get(hearth.ReturnActionID); found {
 		handlers[hearth.ReturnActionID] = &hearthReturnActionHandler{shard: s}
 	}
@@ -328,6 +343,10 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 		logger.Fatal("Invalid action handler registry", zap.Error(actionErr))
 	}
 	s.actionService = actionService
+	if planting != nil {
+		planting.actions = actionService
+		networkCmdSystem.SetSeedPlantingService(planting)
+	}
 	npcAbilities, npcErr := NewNPCAbilityExecutor(s.world, actionService, s.chunkManager)
 	if npcErr != nil {
 		logger.Fatal("Invalid NPC ability executor", zap.Error(npcErr))
@@ -383,9 +402,7 @@ func NewShard(layer int, cfg *config.Config, db *persistence.Postgres, entityIDM
 	s.world.AddSystem(transformSystem)
 	s.world.AddSystem(systems.NewLiftCarryFollowSystem(s.world, liftService, s.eventBus, logger))
 	linkSystem := systems.NewLinkSystem(s.eventBus, logger)
-	if runtime, ok := ecs.TryGetResource[hearth.Runtime](s.world); ok {
-		linkSystem.SetAdditionalContact(runtime.HasOwnerContact)
-	}
+	linkSystem.SetAdditionalContact(s.additionalObjectContact)
 	s.world.AddSystem(linkSystem)
 	s.world.AddSystem(systems.NewStationSystem(s.eventBus))
 	s.world.AddSystem(NewActionValidationSystem(s.world, actionService))
@@ -482,6 +499,9 @@ func (s *Shard) Update(ts ecs.TimeState) {
 	if s.objectDestruction != nil {
 		s.objectDestruction.Update()
 	}
+	if s.cropHarvest != nil {
+		s.cropHarvest.Update()
+	}
 	s.chunkManager.Update(ts.Delta)
 	if s.spotManager != nil {
 		s.spotManager.Update(time.Now())
@@ -501,11 +521,15 @@ func (s *Shard) Stop() {
 	if s.objectDestruction != nil {
 		s.objectDestruction.StopAdmission()
 	}
+	if s.cropHarvest != nil {
+		s.cropHarvest.StopAdmission()
+	}
 	if s.spotManager != nil {
 		s.spotManager.StopAdmission()
 	}
 	s.mu.Unlock()
 	s.drainObjectDestruction()
+	s.drainCropHarvest()
 	s.drainSpotSaves()
 	s.mu.Lock()
 	if s.liftService != nil {

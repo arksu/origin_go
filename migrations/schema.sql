@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS object
     chunk_y     INT                           NOT NULL, -- redundant data for loading by chunk
     heading     SMALLINT CHECK (heading >= 0 AND heading < 360),
 
-    quality     SMALLINT CHECK (quality >= 0) not null default 10,
+	quality     BIGINT CHECK (quality BETWEEN 0 AND 4294967295) not null default 10,
     hp          DOUBLE PRECISION CONSTRAINT object_hp_check
         CHECK (hp >= 0 AND hp < 'Infinity'::double precision),
 

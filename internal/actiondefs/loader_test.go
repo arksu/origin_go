@@ -128,10 +128,10 @@ func TestProductionActionsMatchRegisteredHandlers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.All()) != 8 {
-		t.Fatalf("expected seven player actions and NPC fox bite, got %d", len(registry.All()))
+	if len(registry.All()) != 9 {
+		t.Fatalf("expected eight player actions and NPC fox bite, got %d", len(registry.All()))
 	}
-	if err := registry.ValidateHandlers([]string{"lift", "lift_down", "plow_tile", "dig", "travel_to_hearth_fire"}); err != nil {
+	if err := registry.ValidateHandlers([]string{"lift", "lift_down", "plow_tile", "dig", "plant", "travel_to_hearth_fire"}); err != nil {
 		t.Fatal(err)
 	}
 	bite, exists := registry.Get("fox_bite")

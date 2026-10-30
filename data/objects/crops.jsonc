@@ -1,0 +1,370 @@
+// Temporary crop art reuses the four existing Wild Windsown Weed stage resources.
+{
+  "v": 1,
+  "source": "crops",
+  "objects": [
+    {
+      "defId": 43,
+      "key": "crop_wheat",
+      "name": "Wheat",
+      "static": true,
+      "contextMenuEvenForOneItem": false,
+      "hp": 100,
+      "components": {
+        "collider": {
+          "w": 4,
+          "h": 4,
+          "layer": 0,
+          "mask": 0
+        }
+      },
+      "resource": "wild_windsown_weed/0",
+      "appearance": [
+        {
+          "id": "stage0",
+          "when": {
+            "flags": [
+              "crop.stage0"
+            ]
+          },
+          "resource": "wild_windsown_weed/0"
+        },
+        {
+          "id": "stage1",
+          "when": {
+            "flags": [
+              "crop.stage1"
+            ]
+          },
+          "resource": "wild_windsown_weed/1"
+        },
+        {
+          "id": "stage2",
+          "when": {
+            "flags": [
+              "crop.stage2"
+            ]
+          },
+          "resource": "wild_windsown_weed/2"
+        },
+        {
+          "id": "stage3",
+          "when": {
+            "flags": [
+              "crop.stage3"
+            ]
+          },
+          "resource": "wild_windsown_weed/3"
+        }
+      ],
+      "behaviors": {
+        "crop": {
+          "seedItemKey": "seed_wheat",
+          "plantingSuccessChance": 1,
+          "harvestCycleDurationTicks": 10,
+          "harvestStaminaCost": 10,
+          "stages": [
+            {
+              "durationSeconds": 21600
+            },
+            {
+              "durationSeconds": 21600
+            },
+            {
+              "durationSeconds": 43200
+            },
+            {
+              "durationSeconds": 0,
+              "harvest": [
+                {
+                  "itemKey": "seed_wheat",
+                  "min": 2,
+                  "max": 3
+                },
+                {
+                  "itemKey": "straw",
+                  "min": 1,
+                  "max": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "defId": 44,
+      "key": "crop_carrot",
+      "name": "Carrot",
+      "static": true,
+      "contextMenuEvenForOneItem": false,
+      "hp": 100,
+      "components": {
+        "collider": {
+          "w": 4,
+          "h": 4,
+          "layer": 0,
+          "mask": 0
+        }
+      },
+      "resource": "wild_windsown_weed/0",
+      "appearance": [
+        {
+          "id": "stage0",
+          "when": {
+            "flags": [
+              "crop.stage0"
+            ]
+          },
+          "resource": "wild_windsown_weed/0"
+        },
+        {
+          "id": "stage1",
+          "when": {
+            "flags": [
+              "crop.stage1"
+            ]
+          },
+          "resource": "wild_windsown_weed/1"
+        },
+        {
+          "id": "stage2",
+          "when": {
+            "flags": [
+              "crop.stage2"
+            ]
+          },
+          "resource": "wild_windsown_weed/2"
+        },
+        {
+          "id": "stage3",
+          "when": {
+            "flags": [
+              "crop.stage3"
+            ]
+          },
+          "resource": "wild_windsown_weed/3"
+        }
+      ],
+      "behaviors": {
+        "crop": {
+          "seedItemKey": "seed_carrot",
+          "plantingSuccessChance": 1,
+          "harvestCycleDurationTicks": 10,
+          "harvestStaminaCost": 10,
+          "stages": [
+            {
+              "durationSeconds": 14400
+            },
+            {
+              "durationSeconds": 14400
+            },
+            {
+              "durationSeconds": 28800,
+              "harvest": [
+                {
+                  "itemKey": "carrot",
+                  "min": 1,
+                  "max": 3
+                }
+              ]
+            },
+            {
+              "durationSeconds": 0,
+              "harvest": [
+                {
+                  "itemKey": "carrot",
+                  "min": 1,
+                  "max": 3
+                },
+                {
+                  "itemKey": "seed_carrot",
+                  "min": 1,
+                  "max": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "defId": 45,
+      "key": "crop_beet",
+      "name": "Beet",
+      "static": true,
+      "contextMenuEvenForOneItem": false,
+      "hp": 100,
+      "components": {
+        "collider": {
+          "w": 4,
+          "h": 4,
+          "layer": 0,
+          "mask": 0
+        }
+      },
+      "resource": "wild_windsown_weed/0",
+      "appearance": [
+        {
+          "id": "stage0",
+          "when": {
+            "flags": [
+              "crop.stage0"
+            ]
+          },
+          "resource": "wild_windsown_weed/0"
+        },
+        {
+          "id": "stage1",
+          "when": {
+            "flags": [
+              "crop.stage1"
+            ]
+          },
+          "resource": "wild_windsown_weed/1"
+        },
+        {
+          "id": "stage2",
+          "when": {
+            "flags": [
+              "crop.stage2"
+            ]
+          },
+          "resource": "wild_windsown_weed/2"
+        },
+        {
+          "id": "stage3",
+          "when": {
+            "flags": [
+              "crop.stage3"
+            ]
+          },
+          "resource": "wild_windsown_weed/3"
+        }
+      ],
+      "behaviors": {
+        "crop": {
+          "seedItemKey": "seed_beet",
+          "plantingSuccessChance": 1,
+          "harvestCycleDurationTicks": 10,
+          "harvestStaminaCost": 10,
+          "stages": [
+            {
+              "durationSeconds": 14400
+            },
+            {
+              "durationSeconds": 14400
+            },
+            {
+              "durationSeconds": 28800
+            },
+            {
+              "durationSeconds": 0,
+              "harvest": [
+                {
+                  "itemKey": "beet",
+                  "min": 1,
+                  "max": 3
+                },
+                {
+                  "itemKey": "seed_beet",
+                  "min": 1,
+                  "max": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "defId": 46,
+      "key": "crop_potato",
+      "name": "Potato",
+      "static": true,
+      "contextMenuEvenForOneItem": false,
+      "hp": 100,
+      "components": {
+        "collider": {
+          "w": 4,
+          "h": 4,
+          "layer": 0,
+          "mask": 0
+        }
+      },
+      "resource": "wild_windsown_weed/0",
+      "appearance": [
+        {
+          "id": "stage0",
+          "when": {
+            "flags": [
+              "crop.stage0"
+            ]
+          },
+          "resource": "wild_windsown_weed/0"
+        },
+        {
+          "id": "stage1",
+          "when": {
+            "flags": [
+              "crop.stage1"
+            ]
+          },
+          "resource": "wild_windsown_weed/1"
+        },
+        {
+          "id": "stage2",
+          "when": {
+            "flags": [
+              "crop.stage2"
+            ]
+          },
+          "resource": "wild_windsown_weed/2"
+        },
+        {
+          "id": "stage3",
+          "when": {
+            "flags": [
+              "crop.stage3"
+            ]
+          },
+          "resource": "wild_windsown_weed/3"
+        }
+      ],
+      "behaviors": {
+        "crop": {
+          "seedItemKey": "seed_potato",
+          "plantingSuccessChance": 1,
+          "harvestCycleDurationTicks": 10,
+          "harvestStaminaCost": 10,
+          "stages": [
+            {
+              "durationSeconds": 14400
+            },
+            {
+              "durationSeconds": 14400
+            },
+            {
+              "durationSeconds": 28800
+            },
+            {
+              "durationSeconds": 0,
+              "harvest": [
+                {
+                  "itemKey": "potato",
+                  "min": 2,
+                  "max": 4
+                },
+                {
+                  "itemKey": "seed_potato",
+                  "min": 1,
+                  "max": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

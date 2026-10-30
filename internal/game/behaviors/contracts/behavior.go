@@ -189,6 +189,15 @@ type TakeSkullFn func(
 	targetHandle types.Handle,
 ) BehaviorResult
 
+// CropHarvestFn admits the durable crop-to-inventory harvest operation.
+type CropHarvestFn func(
+	w *ecs.World,
+	playerID types.EntityID,
+	playerHandle types.Handle,
+	targetID types.EntityID,
+	targetHandle types.Handle,
+) BehaviorResult
+
 // ExecutionDeps contains shared dependencies for actions and scheduled behaviors.
 type ExecutionDeps struct {
 	ExhaustBurner       func(w *ecs.World, handle types.Handle) bool
@@ -197,6 +206,7 @@ type ExecutionDeps struct {
 	OpenContainer       OpenContainerFn
 	GiveItem            GiveItemFn
 	TakeSkull           TakeSkullFn
+	CropHarvest         CropHarvestFn
 	EventBus            *eventbus.EventBus
 	Chunks              TreeChunkProvider
 	IDAllocator         EntityIDAllocator

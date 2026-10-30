@@ -126,7 +126,7 @@ func TestSkullClaimPostgresServiceGrantRestartAndAmbiguousCommit(t *testing.T) {
 				skeleton, err := db.Queries().GetObjectByID(ctx, 1)
 				require.NoError(t, err)
 				require.Equal(t, 18, skeleton.TypeID)
-				require.Equal(t, int16(23), skeleton.Quality)
+				require.Equal(t, int64(23), skeleton.Quality)
 				var envelope components.ObjectStateEnvelope
 				require.NoError(t, json.Unmarshal(skeleton.Data.RawMessage, &envelope))
 				var receipt inventory.SkullClaimReceipt

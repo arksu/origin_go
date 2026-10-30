@@ -151,7 +151,7 @@ func TestProductionActionCatalogIncludesUnimplementedAxeActions(t *testing.T) {
 	for snapshot := 0; snapshot < 2; snapshot++ {
 		service.SendList(1)
 		list := sender.lists[snapshot]
-		if len(list.Actions) != 7 {
+		if len(list.Actions) != 8 {
 			t.Fatalf("expected complete production catalog, got %d actions", len(list.Actions))
 		}
 		for _, action := range list.Actions {

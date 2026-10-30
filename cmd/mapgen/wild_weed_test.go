@@ -185,7 +185,7 @@ func TestWildWeedMapgenPostgresManifestAndCheckpoint(t *testing.T) {
 			require.False(t, object.Hp.Valid, "normal default HP comes from the definition")
 			quality, inside := wildWeedQuality(spots[0], point)
 			require.True(t, inside)
-			require.Equal(t, quality, object.Quality)
+			require.Equal(t, int64(quality), object.Quality)
 			require.True(t, grid.allows(point), "WWW must also keep the gap from other WWW")
 			grid.add(point)
 			var envelope components.ObjectStateEnvelope

@@ -312,7 +312,7 @@ func TestObjectDestructionBackpressureAndMaterializationBudget(t *testing.T) {
 func TestObjectDestructionCaptureFailureRetainsAllAndCanRetry(t *testing.T) {
 	f := newDestructionServiceFixture(t)
 	item := lootItem(20, 1, 1)
-	item.Quality = 0
+	item.Quantity = 0
 	root := f.addContainer(1, 0, item)
 	_, err := f.damage.Apply(f.target, 100)
 	require.NoError(t, err)
@@ -323,7 +323,7 @@ func TestObjectDestructionCaptureFailureRetainsAllAndCanRetry(t *testing.T) {
 	require.True(t, f.w.Alive(root))
 	require.Empty(t, f.persister.calls)
 	require.Empty(t, f.chunks.inserted)
-	ecs.WithComponent(f.w, root, func(c *components.InventoryContainer) { c.Items[0].Quality = 17; c.Version++ })
+	ecs.WithComponent(f.w, root, func(c *components.InventoryContainer) { c.Items[0].Quantity = 1; c.Version++ })
 	ecs.GetResource[ecs.TimeState](f.w).Now = ecs.GetResource[ecs.TimeState](f.w).Now.Add(time.Second)
 	f.service.Update()
 	f.chunks.runOne(t)

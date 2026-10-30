@@ -1,59 +1,126 @@
-Таблица культур получена. Теперь страница Quality и фруктовые деревья.
+# Farming
 
-Теперь механика сезонов/зимы и ульи (ускорение роста).
+Four annual crops complete the existing WWW → Drying Frame → seed loop. All
+rules, random outcomes, growth and item creation are server-authoritative.
 
-Основная механика собрана. Осталось: Garden Pot (травы), проверю контекст репозитория для заметок по адаптации.
+## Planting and interaction
 
-Вся информация собрана. Обновляю память (plow tile завершён + сохраняю farming research) и составляю отчёт.
+Take one seed into the hand and right-click plowed ground. The server approaches
+the tile center and performs one 10-tick action costing exactly 10 stamina, with
+no percentage reserve threshold or additional cooldown. The ordinary Plant seed
+menu action uses the same validation and execution. Left-click hand drops retain
+their existing behavior. One click never processes neighboring tiles.
 
-Исследование закончено — отчёт ниже, всё сохранено в память ([hnh-farming-research.md](/Users/park/.zcode/cli/memories/projects/origin_go-93c9f95df00d26bf/memory/hnh-farming-research.md)); память о plow tile обновлена как «реализовано».
+An attempt captures the seed's identity and hand revision before approaching.
+Completion rechecks that seed, stamina, tile center, loaded active chunk, plowed
+terrain and bounded spatial occupancy. A crop occupies one tile; other static
+collider footprints also prevent planting at its center. Players and loose drops
+do not occupy planting space. Invalid, canceled or unavailable attempts consume
+neither seed nor action stamina. Ordinary movement can still cost stamina.
 
-# Farming в Haven & Hearth — механика
+Each crop definition configures `plantingSuccessChance` in [0, 1], default 1.
+A valid random miss consumes the seed and stamina but creates no crop; it is a
+completed paid attempt and sends an informational alert. Successful planting
+creates the crop before committing seed consumption, and preparation failure
+leaves the seed intact. Hand offsets are cleared and its revision advances.
 
-## Ядро цикла
-Вспаханное поле → посадка семян → рост по стадиям (реальное время) → сбор → продукт **+ новые семена** → пересадка. Пшеница даёт 5–18 семян + солому с одного тайла, т.е. цикл самовоспроизводящийся и расширяющийся — это экономический фундамент игры.
+Crops are ordinary damageable static objects with 100 HP and a 4×4 collider.
+Collider layer/mask remain zero at every stage: walking through crops is harmless.
+An existing crop still prevents duplicate planting, including while harvest is
+pending. Terrain overgrowth can turn plowed soil into grass without changing the
+crop. The next planting still requires plowed soil.
 
-## Посадка
-- **5 семян на тайл** (стопка 50 засеивает 10 тайлов). Shift+клик — площадная посадка (с 2021 года, малая AoE).
-- Большинство культур — семенами, но **свёкла, горох, чеснок, лук сажаются самим предметом**.
-- Посадка возможна только на вспашке; **зимой сажать нельзя**.
+## Growth and harvest
 
-## Рост по стадиям
-- У каждой культуры **4–5 стадий**; стадия 1 — «только посажено», с ней ничего нельзя делать. Каждая стадия — отдельный таймер.
-- Сбор открывается на финальной стадии, но у части культур промежуточные стадии дают **другой продукт**: морковь — ст.3 = 1 морковь, ст.4 = 5–18 семян, финал = 1–4 моркови; мак — цветок на ст.5, а редкий Poppy Pod только если урожай простоял спелым ≥24 ч; конопля — почки vs волокно. Это создаёт выбор «семена или продукт».
-- Время роста: от ~16 ч (морковь) до ~7 дней (тыква), типично 2–4 дня.
-- **Улей ускоряет рост**: при переходе стадии культура проверяет радиус **13 тайлов**; пшеница/ячмень/просо/конопля не ускоряются. Несколько ульев не суммируются на одной культуре.
-- Ключевая антистресс-механика (2018): **время простоя в спелой стадии переносится на следующее поколение** — потеряно ноль, если пересадить в течение ~3 реальных дней (до недели с частичной потерей). Таймер сбора как давление убрали.
+Growth uses accumulated server runtime. Unloaded chunks continue to age, stopped
+servers do not. Four visual stages use configurable durations: vegetables
+4/4/8 hours, wheat 6/6/12 hours; the last stage has no deadline and never rots.
 
-## Качество — центральная прогрессия
-- Посаженная культура получает **начальный сдвиг Q [-2, +5]** и затем **периодические случайные [-2, +5]**; реролл модификатора ~раз в 2 ч, **свой на каждый тип культуры и регион**.
-- **Гейт навыком Farming**: если уровень земледелия игрока ≤ Q культуры, положительные сдвиги при сборе игнорируются — навык софткапит качество. У лидера сервера по культуре (выше локального капа) разброс сжимается до [-2, +2].
-- **Побочный продукт (солома, волокно) имеет Q ровно посаженных семян** — детерминированная часть урожая.
-- Инспекция показывает статичный стартовый Q. Так же растёт качество: посев лучших семян партиями с интервалом ≥2 ч даёт 3 независимых броска [-2,+5] за поколение.
+| Crop | Harvest window from planting | Uniform inclusive outputs |
+| --- | --- | --- |
+| Carrot | 8 to less than 16 runtime hours | 1–3 carrots |
+| Carrot | 16 runtime hours onward | 1–3 carrots + 1–2 carrot seeds |
+| Beet | 16 runtime hours onward | 1–3 beets + 1–2 beet seeds |
+| Potato | 16 runtime hours onward | 2–4 potatoes + 1–2 potato seeds |
+| Wheat | 24 runtime hours onward | 2–3 wheat seeds/grains + 1–2 straw |
 
-## Trellis-культуры (многолетние)
-Огурец, виноград, хмель, горох, перец растут **только на шпалере** (3 блока дерева + нить; сама без качества). Сажается один раз — **плодоносит циклами**, причём Q постепенно **растёт от сбора к сбору**. Массовый сбор/посадка тем же интерфейсом, до 3–4 шпалер на колонку тайлов.
+Right-clicking an eligible crop starts one 10-tick Harvest cycle costing exactly
+10 stamina. Growth is reconciled before interaction and at final-tick acceptance;
+a carrot that crosses 16 hours during the action gives the later-stage harvest.
+One shared bounded helper advances from the previous persisted deadline, with at
+most three transitions; it never starts missed stages from the current time.
+The terminal stage cancels its scheduler entry. No crop scan is added per tick.
 
-## Сопутствующие системы
-- **Деревья**: горшок + стол травника (1 л воды + 4 почвы, росток за 1ч15м, без «угнетения») или прямая посадка лопатой (Plant Lore; Q = Q семян / 2; случайный шанс угнетения при посадке). ~150 ч до зрелости, растущее дерево обращает окрестность в лес. Осмотры показывают % роста и финальный Q.
-- **Грядка-холмик (Mound Bed)**: 12 мульчи + 6 соломы, радиус **20 тайлов**, «излучает лето» — зима не действует, снег не ложится; живёт ~60 игровых дней, восстанавливается мульчей.
-- **Садовый горшок** (Gardening): 12 почвы + 4 л воды, сбор **2–3 травы**, 4 цикла до перезаправки; Q = (qГоршок×10 + qПочва + qВода + qРастение×8)/20 с капом по Farming. Зимой активен.
-- **Сезоны**: год 180 игровых дней (лето 105, весна/осень 30, зима 15). Зимой культуры **не умирают, а «истощаются»** (fallow: 7–8 семян вместо полного урожая), многолетники замедляются; без Mound Bed зима = пауза в земледелии.
+Harvest removes the plant. Outputs follow existing placement order: player root
+grids, eligible nested bags, then a free hand. Remaining individual items drop at
+the crop center, using normal drop lifetime and ownership metadata. Each output
+is nonstackable and 1×1. `seed_wheat` is both planting seed and grain.
 
-## Чего в H&H НЕТ (важно для адаптации)
-- **Полива полевых культур нет вообще** (вода нужна только горшку/грядке/рассаде). Форумный «полив» — неосуществлённое пожелание.
-- Удобрений для полей нет; мульча — только для Mound Bed/деревьев. Скорость роста игрок не контролирует, кроме улья.
+## Quality and definitions
 
-## Уроки из жалоб игроков (форум, тред «Improving farming quality of life»)
-Главная боль — **клики растут линейно с площадью поля** и ручная сортировка семян по Q; вторая — давление таймера (решилось переносом времени спелости). Идеи сообщества: многолетность для всех культур, амбар с зоной авто-сбора, удобрения вместо «лотереи» семенного Q.
+`game.farming_quality_variance` is an integer N in [0, 4294967295], default 2.
+A successful planting draws one uniform integer delta in [-N, +N] and stores
+`seed quality + delta` as canonical object quality. Every product and seed from
+that plant has this same Q. No rerolls occur during growth, harvest or retries.
+There is no gameplay cap; arithmetic saturates only at the existing uint32
+representation boundaries, 0 and 4294967295. N=0 exactly preserves seed quality.
 
-## Как это ложится в origin_go (репозиторий проверен)
-- Тайл — голый байт без метаданных, поэтому **культура = отдельный объект-сущность на тайле** с `CropBehaviorState{Stage, NextGrowthTick}` через `ecs.ScheduleBehaviorTick` — прямой аналог уже существующего `tree_behavior.go` (Stage/NextGrowthTick), с catch-up тиками после рестора как у `burner_behavior.go`.
-- `plant` / `harvest` — новые actiondefs JSON по шаблону `plow_tile.json` (target kind tile, approach tile_center) + обработчики в `shard.go`; проверка семян ложится на `Requirements.Equipment.ItemTag: "seed"`.
-- Семена уже есть (`seed_wheat/carrot/beet/potato`, тег "seed"), **качество уже протянуто end-to-end** (InvItem.Quality, БД, крафтовые хелперы) — Q-механика H&H переносима почти напрямую.
-- Визуал стадий — свап `Appearance.Resource` по образцу campfire unlit/burning.
-- Сезонов/зимы у нас нет — fallow и Mound Bed выпадают из первого среза; улей технически дёшев (проверка радиуса при переходе стадии), шпалеры — отдельная фаза.
+Object definitions use the `crop` behavior with `seedItemKey`, optional
+`plantingSuccessChance`, four `stages` containing `durationSeconds` and optional
+`harvest: [{itemKey, min, max}]`, `harvestCycleDurationTicks` and
+`harvestStaminaCost`. Only stages 2 and 3 may declare harvest; final-stage harvest
+is required. Seed mappings are unique. Configuration fails startup for unknown
+items, invalid chances/durations/counts, incompatible items or a configured
+maximum above 32 output units per harvest.
 
-Sources: [Ring of Brodgar: Farming](https://ringofbrodgar.com/wiki/Farming) · [Crops](https://ringofbrodgar.com/wiki/Crops) · [Quality](https://ringofbrodgar.com/wiki/Quality) · [Season](https://ringofbrodgar.com/wiki/Season) · [Mound Bed](https://ringofbrodgar.com/wiki/Mound_Bed) · [Bee Hive](https://ringofbrodgar.com/wiki/Bee_Hive) · [Trellis](https://ringofbrodgar.com/wiki/Trellis) · [Trees](https://ringofbrodgar.com/wiki/Trees) · [Garden Pot](https://ringofbrodgar.com/wiki/Garden_Pot) · [Форум: Improving farming quality of life](https://www.havenandhearth.com/forum/viewtopic.php?f=48&t=71303)
+The existing behavior envelope stores only `stage` and
+`next_growth_runtime_seconds`. Appearance derives from `crop.stage0` through
+`crop.stage3`; temporary visuals reuse the existing WWW stage images. Carrot and
+straw use existing icons; beet and potato use their seed icons temporarily.
+Vegetables are ordinary items without food/FEP behavior. Final artwork, cooking,
+skills, seasons, watering, fertilizer, hives, trellises and batch work are deferred.
 
-Если готов двигаться дальше — можно открыть `openspec-explore` / `openspec-propose` для фичи farming: я бы предложил первый срез «посадка → стадии → сбор → семена» с Q-механикой из H&H, без сезонов/ульев/шпалер.
+World-object quality uses checked BIGINT storage so uint32 Q is not truncated to
+32767 on save. Apply `20261030_object_quality_uint32.sql` before the new server.
+Runtime/protobuf types remain uint32; old portable snapshot version 1 remains
+readable. Spot peak-quality storage is unchanged.
+
+## Persistence and failure handling
+
+Planting keeps the ordinary independent object/player checkpoint contract.
+Clean saves and restarts retain the consumed seed and crop state; cross-entity
+crash-atomic planting is not added.
+
+Harvest uses bounded operation slots and the existing chunk persistence workers.
+Admission reserves the crop, recipient inventory, source chunk and operation
+capacity before accepting the action and charging once. The crop remains a tile
+occupant while pending. Later movement, cancellation or disconnect cannot revoke
+an accepted operation. Its stage, counts, quality and allocated identities are
+retained across retries. Inventory trees are captured in bounded read batches;
+placement is computed on owned scratch data, without changing live inventories.
+
+One transaction commits post-grant player inventories, overflow objects and their
+inventories, the ID checkpoint, and the crop's soft deletion. The retained source
+row stores a harvest receipt. Replay checks it before inventory writes and never
+uses an upsert that can resurrect the crop. Confirmed results apply through the
+owning shard, normal lifecycle cleanup, raw-cache installation and visibility.
+Ground activation retains the existing bounded work and ECS-capacity retry path.
+
+A proven permanent failure before commit preserves the crop, releases its
+reservations, rearms growth, refunds action stamina and alerts the player.
+Uncertain commit results retain the same payload and retry with backoff. Shutdown
+stops admission and drains operations before stopping persistence workers.
+
+## Verification
+
+Focused Go coverage includes planting/revalidation/paid misses, stage boundaries,
+checkpoint restoration, output placement, bounded admission, replay/rollback and
+quality boundaries. PostgreSQL tests use isolated schemas for transactions and
+migration checks. Client crop tests resolve all temporary stage and item assets.
+
+Run `CGO_ENABLED=0 go test ./...`, and in `web_new` run `npm run type-check`,
+`node scripts/test-character-visual.mjs tests/crops.test.ts`,
+`npm run validate-objects`, `npm run test:map-click`, `npm run test:actions`,
+`npm run test:inventory-transfer`, `npm run test:trees`, and
+`npm run test:asset-pipeline`. Run PostgreSQL tests with their documented local
+DSN environment variables; a skipped integration test is not a database pass.

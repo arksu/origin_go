@@ -28,6 +28,13 @@ type ChatRecipientSelector interface {
 	AppendLocalChatRecipients(w *ecs.World, x, y, radius, radiusSq float64, dst []types.EntityID) []types.EntityID
 }
 
+// SeedPlantingService recognizes an authoritative hand item and routes one
+// planting attempt through the ordinary server-owned action lifecycle.
+type SeedPlantingService interface {
+	CanPlantFromHand(*ecs.World, types.EntityID, types.Handle) bool
+	StartPlanting(*ecs.World, types.EntityID, types.Handle, float64, float64)
+}
+
 // ChatDeliveryService provides synchronous chat delivery. Implementations must
 // consume entityIDs before BroadcastChatMessage returns, without retaining it.
 type ChatDeliveryService interface {
@@ -190,6 +197,7 @@ type NetworkCommandSystem struct {
 	buildCommandService         BuildCommandService
 	liftCommandService          LiftCommandService
 	actionService               ActionCommandService
+	seedPlantingService         SeedPlantingService
 	contextPendingTTL           time.Duration
 	standUpHandler              func(*ecs.World, types.Handle, *network.PlayerCommand)
 	playerConnectionValidator   func(*ecs.World, types.EntityID, uint64) bool
@@ -740,7 +748,13 @@ func (s *NetworkCommandSystem) handleSecondaryMapClick(w *ecs.World, playerHandl
 	if s.actionService != nil {
 		s.actionService.Cancel(w, playerID, playerHandle)
 	}
-	if targetID == 0 || !w.Alive(targetHandle) {
+	if targetID == 0 {
+		if s.seedPlantingService != nil && s.seedPlantingService.CanPlantFromHand(w, playerID, playerHandle) {
+			s.seedPlantingService.StartPlanting(w, playerID, playerHandle, float64(click.X), float64(click.Y))
+		}
+		return
+	}
+	if !w.Alive(targetHandle) {
 		return
 	}
 	if _, dropped := ecs.GetComponent[components.DroppedItem](w, targetHandle); dropped {

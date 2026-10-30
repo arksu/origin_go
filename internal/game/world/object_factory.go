@@ -97,6 +97,9 @@ func (f *ObjectFactory) BuildForChunk(w *ecs.World, raw *repository.Object, inve
 }
 
 func (f *ObjectFactory) build(w *ecs.World, raw *repository.Object, inventories []repository.Inventory, deleteExpired bool) (types.Handle, error) {
+	if err := validateObjectQuality(raw.Quality); err != nil {
+		return types.InvalidHandle, fmt.Errorf("object %d: %w", raw.ID, err)
+	}
 	if raw.TypeID == constt.DroppedItemTypeID {
 		if len(inventories) > 0 {
 			return f.buildDroppedItemFromRecords(w, raw, inventories, deleteExpired)
@@ -115,9 +118,6 @@ func (f *ObjectFactory) build(w *ecs.World, raw *repository.Object, inventories 
 			return types.InvalidHandle, err
 		}
 		hpOverride = &raw.Hp.Float64
-	}
-	if raw.Quality < 0 {
-		return types.InvalidHandle, fmt.Errorf("object %d has invalid quality %d", raw.ID, raw.Quality)
 	}
 	// Restoration runs on the shard thread. Check all required handles before
 	// spawning, so capacity failure cannot discard a persisted inventory tree.
@@ -706,11 +706,11 @@ func radiansToHeadingDegrees(direction float64) int16 {
 	return int16(math.Floor(normalized))
 }
 
-func clampQualityToInt16(value uint32) int16 {
-	if value > math.MaxInt16 {
-		return math.MaxInt16
+func validateObjectQuality(value int64) error {
+	if value < 0 || value > math.MaxUint32 {
+		return fmt.Errorf("invalid object quality %d", value)
 	}
-	return int16(value)
+	return nil
 }
 
 func (f *ObjectFactory) spawnContainerTreeFromData(
@@ -904,7 +904,7 @@ func (f *ObjectFactory) Serialize(w *ecs.World, h types.Handle) (*repository.Obj
 		Layer:   info.Layer,
 		ChunkX:  chunkRef.CurrentChunkX,
 		ChunkY:  chunkRef.CurrentChunkY,
-		Quality: clampQualityToInt16(info.Quality),
+		Quality: int64(info.Quality),
 		Hp:      hp,
 		Heading: sql.NullInt16{
 			Int16: radiansToHeadingDegrees(transform.Direction),
@@ -1016,6 +1016,12 @@ func (f *ObjectFactory) DeserializeObjectState(raw *repository.Object) (any, err
 				return nil, fmt.Errorf("failed to decode wild weed state: %w", err)
 			}
 			runtimeState.Behaviors[behaviorKey] = &weedState
+		case "crop":
+			var cropState components.CropBehaviorState
+			if err := json.Unmarshal(rawBehaviorState, &cropState); err != nil {
+				return nil, fmt.Errorf("failed to decode crop state: %w", err)
+			}
+			runtimeState.Behaviors[behaviorKey] = &cropState
 		case "player_dead":
 			var corpseState components.CorpseDecayBehaviorState
 			if err := json.Unmarshal(rawBehaviorState, &corpseState); err != nil {

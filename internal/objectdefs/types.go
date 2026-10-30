@@ -29,6 +29,7 @@ type ObjectDef struct {
 	DryingConfig                   *DryingBehaviorConfig   `json:"-"`
 	LiftConfig                     *LiftBehaviorConfig     `json:"-"`
 	WildWeedConfig                 *WildWeedBehaviorConfig `json:"-"`
+	CropConfig                     *CropBehaviorConfig     `json:"-"`
 	NPCConfig                      *NPCBehaviorConfig      `json:"-"`
 }
 

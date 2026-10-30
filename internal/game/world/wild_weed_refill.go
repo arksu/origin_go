@@ -412,7 +412,7 @@ func (m *SpotManager) prepareWildWeedObject(op *wildWeedRefillOperation, point w
 	op.write.Objects = append(op.write.Objects, repository.Object{
 		ID: int64(first), TypeID: def.DefID, Region: m.region, Layer: 0, X: point.X, Y: point.Y,
 		ChunkX: mathutil.FloorDiv(point.X, constt.ChunkWorldSize), ChunkY: mathutil.FloorDiv(point.Y, constt.ChunkWorldSize),
-		Quality: quality, Hp: sql.NullFloat64{Float64: float64(def.HP), Valid: true}, Data: pqtype.NullRawMessage{RawMessage: data, Valid: true}, CreateTick: int64(ts.Tick), LastTick: int64(ts.Tick),
+		Quality: int64(quality), Hp: sql.NullFloat64{Float64: float64(def.HP), Valid: true}, Data: pqtype.NullRawMessage{RawMessage: data, Valid: true}, CreateTick: int64(ts.Tick), LastTick: int64(ts.Tick),
 	})
 	op.write.MaxAllocatedID = max(op.write.MaxAllocatedID, last)
 	return nil

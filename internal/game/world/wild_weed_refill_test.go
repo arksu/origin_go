@@ -338,7 +338,7 @@ func TestWildWeedRefillCreatesStemAtPreparationRuntime(t *testing.T) {
 	require.Equal(t, int64(1001), object.ID)
 	require.Equal(t, 1, ids.calls)
 	require.Equal(t, 41, object.TypeID)
-	require.Equal(t, int16(30), object.Quality)
+	require.Equal(t, int64(30), object.Quality)
 	require.True(t, object.Hp.Valid)
 	require.Equal(t, 100.0, object.Hp.Float64)
 	require.Equal(t, 774, object.X)

@@ -429,7 +429,7 @@ func TestObjectDestructionPostgresRestartAfterCommitBeforeRuntimeCompletion(t *t
 func TestObjectDestructionPostgresShutdownReportsRejectedCaptureAndKeepsSource(t *testing.T) {
 	f := newObjectDestructionIntegrationFixture(t, 64, 50)
 	f.shard.mu.Lock()
-	ecs.MutateComponent[components.InventoryContainer](f.shard.world, f.owned[0].Handle, func(c *components.InventoryContainer) bool { c.Items[0].Quality = 0; c.Version++; return true })
+	ecs.MutateComponent[components.InventoryContainer](f.shard.world, f.owned[0].Handle, func(c *components.InventoryContainer) bool { c.Items[0].Quantity = 0; c.Version++; return true })
 	f.shard.mu.Unlock()
 	f.hit(t)
 	f.eventually(t, func() bool { return len(f.logs.FilterMessage("Object destruction persistence failed").All()) > 0 })

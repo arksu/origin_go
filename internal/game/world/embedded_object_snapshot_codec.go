@@ -60,7 +60,7 @@ func (f *ObjectFactory) CaptureWorldObjectSnapshot(w *ecs.World, h types.Handle)
 		hp := obj.Hp.Float64
 		snapshot.HP = &hp
 	}
-	if err := validateEmbeddedObjectHealth(snapshot); err != nil {
+	if err := validateEmbeddedObjectSnapshot(snapshot); err != nil {
 		return EmbeddedObjectSnapshotV1{}, err
 	}
 	inventories, err := f.SerializeObjectInventories(w, h)
@@ -93,7 +93,7 @@ func SerializeSnapshotToJSON(snapshot EmbeddedObjectSnapshotV1) ([]byte, error) 
 	if snapshot.Version == 0 {
 		snapshot.Version = embeddedObjectSnapshotVersion
 	}
-	if err := validateEmbeddedObjectHealth(snapshot); err != nil {
+	if err := validateEmbeddedObjectSnapshot(snapshot); err != nil {
 		return nil, err
 	}
 	return json.Marshal(snapshot)
@@ -110,13 +110,16 @@ func DeserializeSnapshotFromJSON(data []byte) (EmbeddedObjectSnapshotV1, error) 
 	if snapshot.Version != embeddedObjectSnapshotVersion {
 		return snapshot, fmt.Errorf("unsupported embedded object snapshot version %d", snapshot.Version)
 	}
-	if err := validateEmbeddedObjectHealth(snapshot); err != nil {
+	if err := validateEmbeddedObjectSnapshot(snapshot); err != nil {
 		return EmbeddedObjectSnapshotV1{}, err
 	}
 	return snapshot, nil
 }
 
-func validateEmbeddedObjectHealth(snapshot EmbeddedObjectSnapshotV1) error {
+func validateEmbeddedObjectSnapshot(snapshot EmbeddedObjectSnapshotV1) error {
+	if err := validateObjectQuality(snapshot.Quality); err != nil {
+		return err
+	}
 	if snapshot.TypeID == _const.DroppedItemTypeID {
 		if snapshot.HP != nil {
 			return ErrInvalidObjectHP
@@ -143,7 +146,7 @@ func (f *ObjectFactory) SpawnWorldObjectFromSnapshot(
 	if snapshot.EntityID == 0 {
 		return types.InvalidHandle, fmt.Errorf("snapshot entity id is zero")
 	}
-	if err := validateEmbeddedObjectHealth(snapshot); err != nil {
+	if err := validateEmbeddedObjectSnapshot(snapshot); err != nil {
 		return types.InvalidHandle, err
 	}
 	if opts.ChunkManager == nil {

@@ -1,0 +1,51 @@
+// Beet and potato temporarily reuse their seed icons. Products have no food or progression rules.
+{
+  "v": 1,
+  "source": "crops",
+  "items": [
+    {
+      "defId": 4007,
+      "key": "carrot",
+      "name": "Carrot",
+      "resource": "items/carrot.png",
+      "tags": [],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 4008,
+      "key": "beet",
+      "name": "Beet",
+      "resource": "items/seed_beet.png",
+      "tags": [],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 4009,
+      "key": "potato",
+      "name": "Potato",
+      "resource": "items/seed_potato.png",
+      "tags": [],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    },
+    {
+      "defId": 4010,
+      "key": "straw",
+      "name": "Straw",
+      "resource": "items/straw.png",
+      "tags": [],
+      "size": {
+        "w": 1,
+        "h": 1
+      }
+    }
+  ]
+}

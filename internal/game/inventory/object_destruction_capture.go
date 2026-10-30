@@ -178,7 +178,7 @@ func (c *ObjectLootCapture) CaptureBatch(w *ecs.World, registry *itemdefs.Regist
 		}
 		item := container.Items[frame.position]
 		definition, ok := registry.GetByID(int(item.TypeID))
-		if !ok || !validObjectLootItem(item, definition, c.reservedRecipient) || item.ItemID == c.targetID ||
+		if !ok || !validObjectLootItem(item, definition) || item.ItemID == c.targetID ||
 			container.Kind == constt.InventoryGrid && (int(item.X)+int(item.W) > int(container.Width) || int(item.Y)+int(item.H) > int(container.Height)) {
 			return c.fail()
 		}
@@ -282,9 +282,8 @@ func (c *ObjectLootCapture) readContainer(w *ecs.World, refs *ecs.InventoryRefIn
 	return container, true
 }
 
-func validObjectLootItem(item components.InvItem, definition *itemdefs.ItemDef, allowZeroQuality bool) bool {
-	// A skull inherits the exact skeleton quality, including valid restored zero.
-	if item.ItemID == 0 || item.ItemID > math.MaxInt64 || item.TypeID == 0 || item.Quality == 0 && !allowZeroQuality && definition.Key != "skull" || item.Quantity == 0 || item.W == 0 || item.H == 0 ||
+func validObjectLootItem(item components.InvItem, definition *itemdefs.ItemDef) bool {
+	if item.ItemID == 0 || item.ItemID > math.MaxInt64 || item.TypeID == 0 || item.Quantity == 0 || item.W == 0 || item.H == 0 ||
 		int(item.W) != definition.Size.W || int(item.H) != definition.Size.H {
 		return false
 	}

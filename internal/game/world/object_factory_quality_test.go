@@ -2,6 +2,8 @@ package world
 
 import (
 	"database/sql"
+	"math"
+	"strconv"
 	"testing"
 
 	constt "origin/internal/const"
@@ -10,6 +12,8 @@ import (
 	"origin/internal/objectdefs"
 	"origin/internal/persistence/repository"
 	"origin/internal/types"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestObjectFactoryBuild_LoadsQualityIntoEntityInfo(t *testing.T) {
@@ -85,6 +89,46 @@ func TestObjectFactorySerialize_SavesQualityFromEntityInfo(t *testing.T) {
 	}
 	if raw.Quality != 77 {
 		t.Fatalf("expected serialized quality 77, got %d", raw.Quality)
+	}
+}
+
+func TestObjectFactoryQualityFullUint32RoundTrip(t *testing.T) {
+	installObjectHealthLifecycleDefinitions(t)
+	for _, quality := range []uint32{0, 32767, 32768, math.MaxInt32 + 1, math.MaxUint32} {
+		t.Run(strconv.FormatUint(uint64(quality), 10), func(t *testing.T) {
+			w := ecs.NewWorldForTesting()
+			factory := NewObjectFactory(nil)
+			raw := &repository.Object{
+				ID: 2010, TypeID: objectHealthLifecycleTypeID, Region: 1,
+				Quality: int64(quality), Hp: sql.NullFloat64{Float64: 100, Valid: true},
+			}
+			h, err := factory.Build(w, raw, nil)
+			require.NoError(t, err)
+			info, ok := ecs.GetComponent[components.EntityInfo](w, h)
+			require.True(t, ok)
+			require.Equal(t, quality, info.Quality)
+			ecs.AddComponent(w, h, components.ChunkRef{})
+			saved, err := factory.Serialize(w, h)
+			require.NoError(t, err)
+			require.NotNil(t, saved)
+			require.Equal(t, raw.Quality, saved.Quality)
+		})
+	}
+}
+
+func TestObjectFactoryQualityRejectsInvalidBeforeSpawn(t *testing.T) {
+	installObjectHealthLifecycleDefinitions(t)
+	for _, quality := range []int64{-1, math.MaxUint32 + 1, math.MaxInt64} {
+		for _, typeID := range []int{objectHealthLifecycleTypeID, constt.DroppedItemTypeID} {
+			w := ecs.NewWorldForTesting()
+			h, err := NewObjectFactory(nil).Build(w, &repository.Object{
+				ID: 2011, TypeID: typeID, Quality: quality,
+				Hp: sql.NullFloat64{Float64: 100, Valid: true},
+			}, nil)
+			require.ErrorContains(t, err, "invalid object quality")
+			require.Equal(t, types.InvalidHandle, h)
+			require.Zero(t, w.EntityCount())
+		}
 	}
 }
 

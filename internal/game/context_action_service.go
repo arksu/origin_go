@@ -137,6 +137,10 @@ func (s *ContextActionService) SetTakeSkull(fn contracts.TakeSkullFn) {
 	s.actionDeps.TakeSkull = fn
 }
 
+func (s *ContextActionService) SetCropHarvest(fn contracts.CropHarvestFn) {
+	s.actionDeps.CropHarvest = fn
+}
+
 func (s *ContextActionService) SetSoundEventService(service *SoundEventService) {
 	s.soundEvents = service
 }

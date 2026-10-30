@@ -111,7 +111,7 @@ func TestMapgenObjectHealthDefaultsPostgres(t *testing.T) {
 		counts[raw.TypeID]++
 		require.False(t, raw.Hp.Valid, "generated objects must keep definition-default HP NULL")
 		require.False(t, raw.Data.Valid, "generated objects must not persist a growing tree state")
-		require.Equal(t, int16(10), raw.Quality)
+		require.Equal(t, int64(10), raw.Quality)
 		require.True(t, raw.Heading.Valid)
 		require.Zero(t, raw.Heading.Int16)
 		require.GreaterOrEqual(t, raw.X, 0)

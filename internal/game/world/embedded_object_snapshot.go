@@ -18,7 +18,7 @@ type EmbeddedObjectSnapshotV1 struct {
 	TypeID   int    `json:"type_id"`
 	Region   int    `json:"region"`
 	Layer    int    `json:"layer"`
-	Quality  int16  `json:"quality"`
+	Quality  int64  `json:"quality"`
 
 	// HP is required for definition-backed objects; nil denotes a dropped item.
 	HP         *float64        `json:"hp,omitempty"`

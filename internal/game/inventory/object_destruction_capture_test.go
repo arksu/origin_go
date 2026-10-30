@@ -117,6 +117,46 @@ func TestObjectLootCaptureEmptyAndOtherRootKinds(t *testing.T) {
 	require.Equal(t, uint32(3), capture.ContainerRefs()[1].Key)
 }
 
+func TestObjectLootCapturePreservesZeroQualitySeedAndProduct(t *testing.T) {
+	for _, transformation := range []bool{false, true} {
+		name := "destruction"
+		if transformation {
+			name = "corpse transformation"
+		}
+		t.Run(name, func(t *testing.T) {
+			w, _, target, roots := objectLootCaptureFixture()
+			registry := itemdefs.NewRegistry([]itemdefs.ItemDef{
+				{DefID: 1, Key: "seed_wheat", Size: itemdefs.Size{W: 1, H: 1}, Stack: &itemdefs.Stack{Mode: itemdefs.StackModeStack, Max: 1000}},
+				{DefID: 2, Key: "bag", Size: itemdefs.Size{W: 1, H: 1}, Container: &itemdefs.ContainerDef{Size: itemdefs.Size{W: 4, H: 4}}},
+				{DefID: 3, Key: "carrot", Size: itemdefs.Size{W: 1, H: 1}, Stack: &itemdefs.Stack{Mode: itemdefs.StackModeStack, Max: 1000}},
+			})
+			refs := ecs.GetResource[ecs.InventoryRefIndex](w)
+			seedRoot, ok := refs.Lookup(constt.InventoryGrid, 100, 5)
+			require.True(t, ok)
+			ecs.WithComponent(w, seedRoot, func(c *components.InventoryContainer) { c.Items[0].Quality = 0 })
+			nested, ok := refs.Lookup(constt.InventoryGrid, 103, 0)
+			require.True(t, ok)
+			ecs.WithComponent(w, nested, func(c *components.InventoryContainer) { c.Items[0].TypeID, c.Items[0].Quality = 3, 0 })
+			capture := NewObjectLootCapture(100, roots)
+			if transformation {
+				ecs.WithComponent(w, target, func(state *components.ObjectInternalState) { state.HP = .49 })
+				ecs.SetResource(w, ecs.ObjectDestructionState{Pending: map[types.Handle]bool{target: true}})
+				capture = NewObjectLootCaptureForTransformation(100, roots)
+			}
+			finishObjectLootCapture(t, capture, w, registry, 1)
+			items := capture.Items()
+			require.Len(t, items, 2)
+			require.Equal(t, uint32(1), items[1].TypeID)
+			require.Zero(t, items[1].Quality)
+			product := items[0].NestedInventory.Items[0].NestedInventory.Items[0]
+			require.Equal(t, uint32(3), product.TypeID)
+			require.Zero(t, product.Quality)
+			require.Equal(t, uint32(5), product.Quantity)
+			require.True(t, w.Alive(target))
+		})
+	}
+}
+
 func TestObjectLootCaptureRejectsDamagedStateWithoutMutation(t *testing.T) {
 	for _, scenario := range []struct {
 		name   string
@@ -131,9 +171,6 @@ func TestObjectLootCaptureRejectsDamagedStateWithoutMutation(t *testing.T) {
 		}},
 		{"unknown definition", func(w *ecs.World, _ types.Handle, roots []ecs.InventoryRefEntry) {
 			ecs.MutateComponent[components.InventoryContainer](w, roots[0].Handle, func(c *components.InventoryContainer) bool { c.Items[0].TypeID = 999; return true })
-		}},
-		{"zero quality", func(w *ecs.World, _ types.Handle, roots []ecs.InventoryRefEntry) {
-			ecs.MutateComponent[components.InventoryContainer](w, roots[0].Handle, func(c *components.InventoryContainer) bool { c.Items[0].Quality = 0; return true })
 		}},
 		{"zero quantity", func(w *ecs.World, _ types.Handle, roots []ecs.InventoryRefEntry) {
 			ecs.MutateComponent[components.InventoryContainer](w, roots[0].Handle, func(c *components.InventoryContainer) bool { c.Items[0].Quantity = 0; return true })
